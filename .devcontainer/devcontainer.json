@@ -1,0 +1,44 @@
+{
+
+    // docker compose run --service-ports --rm app /bin/bash
+  
+      // "image" : "hsi_ss",
+      "image" : "fractals",
+  
+      "mounts":[
+   
+          "source=${localWorkspaceFolder}/../HyperImages/LIB-HSI,target=/workspaces/LIB-HSI,type=bind,consistency=cached",
+      ],
+  
+      "runArgs":[
+  
+          "--gpus=all",
+          "-e", "HOST_UID=$(id -u)",
+          "-e", "HOST_GID=$(id -g)",
+          "--shm-size=30g",
+          // "-m", "25g",
+          // "-u", "0", // root user
+      ],
+  
+      "customizations": {
+          // Configure properties specific to VS Code.
+          "vscode": {
+            // Add the IDs of extensions you want installed when the container is created.
+            "extensions": [
+              "ms-python.python",
+              "ms-azuretools.vscode-docker",
+              "streetsidesoftware.code-spell-checker",
+        "ms-toolsai.jupyter",
+        "ms-toolsai.tensorboard"
+              ],
+              
+          }
+        },
+  
+  
+  }
+  
+  
+  
+  //  /workspaces/hsi_ss/crfasrnn$ sudo  python3 setup.py install running install
+  // pip install einops
