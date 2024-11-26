@@ -1,8 +1,8 @@
 # build command  
 # docker build -t fractals .  
 
-# FROM nvidia/cuda:12.5.0-devel-ubuntu22.04
-FROM nvidia/cuda:12.2.2-devel-ubuntu22.04
+FROM nvidia/cuda:12.5.0-devel-ubuntu22.04
+# FROM nvidia/cuda:12.2.2-devel-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -21,34 +21,31 @@ RUN apt install -y \
     g++ \
     ca-certificates \
     htop \
-    nano
+    nano \
+    libgl1-mesa-glx \
+    gdal-bin \    
+    python3-tk
 
 
 RUN pip install \
     torch \
     torchvision\
     omegaconf \
-    torchmetrics==0.10.3 \
+    torchmetrics \
     fvcore \
     iopath \
-    xformers==0.0.18 \
-    submitit 
-    # cuml-cu11
-    
-RUN pip install \
+    xformers\
+    submitit \
     matplotlib \
     ipykernel \
     opencv-python \
     scikit-learn \
     albumentations \
     transformers \
-    evaluate
-
-RUN apt install -y \
-    libgl1-mesa-glx \
-    gdal-bin
-    
-RUN pip install \
+    evaluate \
+    segmentation-models-pytorch \
+    numba \
+    tifffile \
     lightning \
     tensorboard \
     torch-tb-profiler \
@@ -56,15 +53,6 @@ RUN pip install \
     matplotlib \
     seaborn 
 
-RUN pip install --upgrade torchmetrics 
-
-RUN apt-get install -y python3-tk
-
-RUN pip install segmentation-models-pytorch 
-
-RUN pip install numba
-
-RUN pip install tifffile
 
 RUN useradd -m developer 
 
