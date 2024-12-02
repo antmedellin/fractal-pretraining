@@ -82,7 +82,7 @@ num_points = 204  # Number of points in each spectral curve aka number of bands
 sigma = 6  # Standard deviation for Gaussian kernel
 num_curves_to_plot = 5
 num_epochs = 1000
-num_images = 20000 # number of images to generate # each image is 13.5 MB 
+num_images = 20 # number of images to generate # each image is 13.5 MB 
 output_dir = 'output'
 
 

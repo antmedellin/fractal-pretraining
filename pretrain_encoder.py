@@ -34,6 +34,27 @@ def collate_fn(inputs):
     hsi_pixel_values = torch.stack([item for item in inputs], dim=0)
     return {"hsi_pixel_values": hsi_pixel_values}
 
+def spectral_angle_mapper_loss(predicted, target):
+    # Flatten the tensors to (batch_size, num_channels, -1)
+    predicted_flat = predicted.view(predicted.size(0), predicted.size(1), -1)
+    target_flat = target.view(target.size(0), target.size(1), -1)
+    
+    # Compute the dot product between predicted and target
+    dot_product = torch.sum(predicted_flat * target_flat, dim=1)
+    
+    # Compute the norms of predicted and target
+    norm_predicted = torch.norm(predicted_flat, dim=1)
+    norm_target = torch.norm(target_flat, dim=1)
+    
+    # Compute the spectral angle
+    cos_theta = dot_product / (norm_predicted * norm_target + 1e-8)  # Add a small value to avoid division by zero
+    theta = torch.acos(torch.clamp(cos_theta, -1.0, 1.0))
+    
+    # Compute the mean spectral angle over all pixels
+    sam_loss = torch.mean(theta)
+    
+    return sam_loss
+
 class BaseSegmentationModel(L.LightningModule):
         def __init__(self,  learning_rate = 1e-3, num_channels=12, num_workers=4, train_dataset=None, val_dataset=None,  batch_size=2, training_epochs = 100 ):
             super().__init__()
@@ -49,7 +70,9 @@ class BaseSegmentationModel(L.LightningModule):
             
             self.save_hyperparameters()
             
-            self.loss_fn = torch.nn.MSELoss()
+            # self.loss_fn = torch.nn.MSELoss()
+            self.loss_fn = spectral_angle_mapper_loss
+
 
         def forward(self, hsi_img):
             raise NotImplementedError("Subclasses should implement this method")
@@ -167,7 +190,7 @@ class fractal_dataset(Dataset):
             
         return hsi_img      
 
-  
+
 class convnext2_model(BaseSegmentationModel):
     def __init__(self,  learning_rate=1.5e-4, num_channels=204, num_workers=4, train_dataset=None, val_dataset=None, batch_size=2, training_epochs=100, image_size=256, patch_size=4):
         super().__init__( learning_rate, num_channels, num_workers, train_dataset, val_dataset, batch_size, training_epochs)
@@ -298,10 +321,46 @@ class convnext2_model(BaseSegmentationModel):
         
         return x
 
+class SpectralAdapter(nn.Module):
+    def __init__(self, in_channels):
+        super(SpectralAdapter, self).__init__()
+        self.conv1 = nn.Conv1d(in_channels, 128, kernel_size=7, stride=5)
+        self.bn1 = nn.BatchNorm1d(128)
+        self.relu1 = nn.ReLU(inplace=True)
+        
+        self.conv2 = nn.Conv1d(128, 128, kernel_size=7, stride=5)
+        self.bn2 = nn.BatchNorm1d(128)
+        self.relu2 = nn.ReLU(inplace=True)
+        
+        self.conv3 = nn.Conv1d(128, 128, kernel_size=5, stride=3)
+        self.bn3 = nn.BatchNorm1d(128)
+        self.relu3 = nn.ReLU(inplace=True)
+        
+        self.global_pool = nn.AdaptiveAvgPool1d(1)
+        
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu1(x)
+        
+        x = self.conv2(x)
+        x = self.bn2(x)
+        x = self.relu2(x)
+        
+        x = self.conv3(x)
+        x = self.bn3(x)
+        x = self.relu3(x)
+        
+        x = self.global_pool(x)
+        return x
+
+
 class swin2_model(BaseSegmentationModel):
     def __init__(self,  learning_rate=1.5e-4, num_channels=204, num_workers=4, train_dataset=None, val_dataset=None, batch_size=2, training_epochs=100, image_size=256, patch_size=4):
         super().__init__( learning_rate, num_channels, num_workers, train_dataset, val_dataset, batch_size, training_epochs)
         
+        
+        # microsoft/swinv2-large-patch4-window12-192-22k
         configuration = Swinv2Config(
             num_channels=num_channels,
             patch_size=patch_size,
@@ -314,6 +373,19 @@ class swin2_model(BaseSegmentationModel):
         sys.exit()
         # add decode head 
         
+        
+        #need to verify the spectral adapter for 1d convolutions
+        self.spectral_adapter = SpectralAdapter(num_channels)
+        
+        
+        #spectral adapter 
+        
+        # swin2 model 
+        
+        # decoder used for masked autoencoder 
+
+        
+        
     def forward(self, hsi_img):
         
         # print(hsi_img.shape)
@@ -325,10 +397,13 @@ class swin2_model(BaseSegmentationModel):
         
         return x
 
+# https://github.com/huggingface/transformers/blob/main/examples/pytorch/image-pretraining/README.md 
+# use MAE 
+
 
 # test out loading hsi image 
 datset_dir = "output"
-batch_size = 16
+batch_size = 1#6
 accumulate_grad_batches = 4
 num_workers = 4 
 initial_lr =  1.5e-4
@@ -426,13 +501,13 @@ model.hparams.batch_size = batch_size
 trainer.fit(model)
 
 
-# # load the model and save as huggingface model
-model = convnext2_model.load_from_checkpoint('lightning_logs/version_11/checkpoints/lowest_val_loss_hsi.ckpt')
+# # # load the model and save as huggingface model
+# model = convnext2_model.load_from_checkpoint('lightning_logs/version_11/checkpoints/lowest_val_loss_hsi.ckpt')
 
-# # only save backbone encoder
-# # print(model.backbone)
-backbone = model.backbone
-torch.save(backbone.state_dict(), "convnextv2_config/convnextv2_backbone.pth")
-backbone.save_pretrained("convnextv2_config/convnextv2_backbone")
+# # # only save backbone encoder
+# # # print(model.backbone)
+# backbone = model.backbone
+# torch.save(backbone.state_dict(), "convnextv2_config/convnextv2_backbone.pth")
+# backbone.save_pretrained("convnextv2_config/convnextv2_backbone")
 
 print("model saved")
