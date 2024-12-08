@@ -1,0 +1,63 @@
+{
+  "architectures": [
+    "Swinv2ForMaskedImageModeling"
+  ],
+  "attention_probs_dropout_prob": 0.0,
+  "depths": [
+    2,
+    2,
+    18,
+    2
+  ],
+  "drop_path_rate": 0.1,
+  "embed_dim": 192,
+  "encoder_stride": 32,
+  "hidden_act": "gelu",
+  "hidden_dropout_prob": 0.0,
+  "hidden_size": 1536,
+  "image_size": 256,
+  "initializer_range": 0.02,
+  "layer_norm_eps": 1e-05,
+  "mlp_ratio": 4.0,
+  "model_type": "swinv2",
+  "num_channels": 128,
+  "num_heads": [
+    6,
+    12,
+    24,
+    48
+  ],
+  "num_layers": 4,
+  "out_features": [
+    "stage1",
+    "stage2",
+    "stage3",
+    "stage4"
+  ],
+  "out_indices": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "patch_size": 4,
+  "path_norm": true,
+  "pretrained_window_sizes": [
+    0,
+    0,
+    0,
+    0
+  ],
+  "qkv_bias": true,
+  "stage_names": [
+    "stem",
+    "stage1",
+    "stage2",
+    "stage3",
+    "stage4"
+  ],
+  "torch_dtype": "float32",
+  "transformers_version": "4.46.0",
+  "use_absolute_embeddings": false,
+  "window_size": 12
+}

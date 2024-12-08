@@ -480,7 +480,73 @@ class convnext_upernet(BaseSegmentationModel):
         outputs = self.backbone_upernet(hsi_img)
         return outputs.logits
         
+class SpectralAdapter_new(nn.Module):
+    def __init__(self, in_channels):
+        super(SpectralAdapter_new, self).__init__()
+        self.conv1 = nn.Conv2d(in_channels, 200, kernel_size=1 )
+        self.bn1 = nn.BatchNorm2d(200)
+        self.relu1 = nn.ReLU()
         
+        self.conv2 = nn.Conv2d(200, 150, kernel_size=1 )
+        self.bn2 = nn.BatchNorm2d(150)
+        self.relu2 = nn.ReLU()
+        
+        self.conv3 = nn.Conv2d(150, 128, kernel_size=1 )
+        self.bn3 = nn.BatchNorm2d(128)
+        self.relu3 = nn.ReLU()
+        
+        # self.global_pool = nn.AdaptiveAvgPool1d(1)
+        
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu1(x)
+        
+        x = self.conv2(x)
+        x = self.bn2(x)
+        x = self.relu2(x)
+        
+        x = self.conv3(x)
+        x = self.bn3(x)
+        x = self.relu3(x)
+        
+        # x = self.global_pool(x)
+        # x = x.view(x.size(0), -1)  # Flatten the output
+        return x
+    
+class swin2_upernet(BaseSegmentationModel):
+    def __init__(self, num_classes, learning_rate=1e-3, ignore_index=0, num_channels=12, num_workers=4, train_dataset=None, val_dataset=None, test_dataset=None, batch_size=2, patch_size=4, image_size=256):
+
+   
+        super().__init__(num_classes, learning_rate, ignore_index, num_channels, num_workers, train_dataset, val_dataset, test_dataset, batch_size)
+
+       
+         
+        self.spectral_adapter = SpectralAdapter_new(num_channels)
+        
+        seg_head = UperNetConfig(
+            
+            backbone="swinv2_config", 
+            use_pretrained_backbone=False,
+            
+            # backbone_config=backbone_configuration, 
+            
+            num_labels = num_classes,    
+            out_features=["stage1", "stage2", "stage3", "stage4"],
+            use_auxiliary_head=False,
+            num_channels= 128,   
+            image_size=image_size,   
+            patch_size=patch_size,       
+        )                   
+        self.backbone_upernet = UperNetForSemanticSegmentation(seg_head)
+        
+
+
+    def forward(self, hsi_img, rgb_img):
+        feature_img = self.spectral_adapter(hsi_img)
+        outputs = self.backbone_upernet(feature_img)
+        return outputs.logits
+               
 dataset_dir='/workspaces/LIB-HSI'
 rgb_data_json = '/workspaces/fractal-pretraining/lib_hsi_rgb.json'
 file_data =  open(rgb_data_json)
@@ -546,7 +612,8 @@ val_dataset = LIBHSIDataset(image_set="validation", root_dir=dataset_dir, id2col
 
 
 
-model = convnext_upernet(num_classes=num_classes,learning_rate=initial_lr, ignore_index=ignore_index, num_channels= num_channels, num_workers=num_workers,  train_dataset=train_dataset,val_dataset=val_dataset, test_dataset=test_dataset, batch_size=batch_size, image_size=img_height)
+# model = convnext_upernet(num_classes=num_classes,learning_rate=initial_lr, ignore_index=ignore_index, num_channels= num_channels, num_workers=num_workers,  train_dataset=train_dataset,val_dataset=val_dataset, test_dataset=test_dataset, batch_size=batch_size, image_size=img_height)
+model = swin2_upernet(num_classes=num_classes,learning_rate=initial_lr, ignore_index=ignore_index, num_channels= num_channels, num_workers=num_workers,  train_dataset=train_dataset,val_dataset=val_dataset, test_dataset=test_dataset, batch_size=batch_size, image_size=img_height)
 
 
 
