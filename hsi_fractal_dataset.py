@@ -84,68 +84,94 @@ num_curves_to_plot = 5
 num_epochs = 1000
 num_images = 20 # number of images to generate # each image is 13.5 MB 
 output_dir = 'output'
-
+train_decoder = False
+# if train_decoder is False then the decoder is loaded from the file
+# also need latent min and max 
+latent_min = [-1.14451  , -0.9793242 , -1.0160341]
+latent_max = [1.0071142 , 1.1114244 , 1.0671806]
+time_series = True
 
 # make sure the output directory exists
 if not os.path.exists(output_dir):
     os.makedirs(output_dir)
     
 
-# Generate random spectral curves
-spectral_curves = np.random.rand(num_curves, num_points)
-# convert to dtype float16
-spectral_curves = spectral_curves.astype(np.float32)
-# Apply Gaussian filter to smooth the curves
-smoothed_curves = gaussian_filter1d(spectral_curves, sigma=sigma, axis=1)
+if train_decoder:
+    # Generate random spectral curves
+    spectral_curves = np.random.rand(num_curves, num_points)
+    # convert to dtype float16
+    spectral_curves = spectral_curves.astype(np.float32)
+    # Apply Gaussian filter to smooth the curves
+    smoothed_curves = gaussian_filter1d(spectral_curves, sigma=sigma, axis=1)
 
 
-# Use PCA to reduce the dimensionality to 2D (similar to a latent space)
-pca = PCA(n_components=3)
-latent_space = pca.fit_transform(smoothed_curves)
+    # Use PCA to reduce the dimensionality to 2D (similar to a latent space)
+    pca = PCA(n_components=3)
+    latent_space = pca.fit_transform(smoothed_curves)
 
-decoder = Decoder(num_points)
+    decoder = Decoder(num_points)
 
 
-# Define loss function and optimizer
-criterion = nn.MSELoss()
-optimizer = optim.AdamW(decoder.parameters())
+    # Define loss function and optimizer
+    criterion = nn.MSELoss()
+    optimizer = optim.AdamW(decoder.parameters())
 
-# Convert data to PyTorch tensors
-latent_space_tensor = torch.tensor(latent_space, dtype=torch.float32)
-smoothed_curves_tensor = torch.tensor(smoothed_curves, dtype=torch.float32)
+    # Convert data to PyTorch tensors
+    latent_space_tensor = torch.tensor(latent_space, dtype=torch.float32)
+    smoothed_curves_tensor = torch.tensor(smoothed_curves, dtype=torch.float32)
 
-# Train the decoder
+    # Train the decoder
 
-batch_size = num_curves
-num_batches = len(latent_space_tensor) // batch_size
+    batch_size = num_curves
+    num_batches = len(latent_space_tensor) // batch_size
 
-for epoch in range(num_epochs):
-    for i in range(num_batches):
-        start_idx = i * batch_size
-        end_idx = start_idx + batch_size
-        batch_latent_space = latent_space_tensor[start_idx:end_idx]
-        batch_smoothed_curves = smoothed_curves_tensor[start_idx:end_idx]
+    for epoch in range(num_epochs):
+        for i in range(num_batches):
+            start_idx = i * batch_size
+            end_idx = start_idx + batch_size
+            batch_latent_space = latent_space_tensor[start_idx:end_idx]
+            batch_smoothed_curves = smoothed_curves_tensor[start_idx:end_idx]
 
-        # Forward pass
-        # print(batch_latent_space.shape)
-        outputs = decoder(batch_latent_space)
-        loss = criterion(outputs, batch_smoothed_curves)
+            # Forward pass
+            # print(batch_latent_space.shape)
+            outputs = decoder(batch_latent_space)
+            loss = criterion(outputs, batch_smoothed_curves)
 
-        # Backward pass and optimization
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+            # Backward pass and optimization
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
 
-latent_min = latent_space.min(axis=0)
-latent_max = latent_space.max(axis=0)
-latent_min = torch.tensor(latent_min)
-latent_max = torch.tensor(latent_max)
+    latent_min = latent_space.min(axis=0)
+    latent_max = latent_space.max(axis=0)
+    print('Latent min:', latent_min, 'Latent max:', latent_max)
+    latent_min = torch.tensor(latent_min)
+    latent_max = torch.tensor(latent_max)
+    
+    # Save the decoder
+    torch.save(decoder, 'decoder.pth')
 
+else:
+    
+    # load the decoder 
+    decoder = torch.load('decoder.pth')
+    latent_min = torch.tensor(latent_min)
+    latent_max = torch.tensor(latent_max)
+
+# Define the different channel orders
+channel_orders = [
+    (0, 1, 2),  # rgb
+    # (0, 2, 1),  # rbg
+    # (1, 0, 2),  # gbr
+    (1, 2, 0),  # grb
+    # (2, 0, 1),  # brg
+    (2, 1, 0)   # bgr
+]
 
 # after the decoder is trained we can use it on images 
-
-
-for i in range(num_images):
+i=0
+while i < num_images:
+# for i in range(num_images):
     
     system = ifs.sample_system()
     points = ifs.iterate(system, 100000)
@@ -166,33 +192,70 @@ for i in range(num_images):
     # Assuming composite is a NumPy array of shape (H, W, C)
     composite_tensor = torch.tensor(composite.transpose(2, 0, 1), dtype=torch.float32) / 255.0
 
+    # print('Composite tensor shape:', composite_tensor.shape)
+    # sys.exit()
+    if time_series==False: 
+        # Add Gaussian noise
+        noisy_image = add_gaussian_noise(composite_tensor)
 
-    # Add Gaussian noise
-    noisy_image = add_gaussian_noise(composite_tensor)
+        # Normalize the noisy image to the latent space
+        normalized_image = normalize_to_latent_space(noisy_image, latent_min, latent_max)
 
-    # Normalize the noisy image to the latent space
-    normalized_image = normalize_to_latent_space(noisy_image, latent_min, latent_max)
+        # Flatten the normalized image tensor
+        flattened_image = normalized_image.view(normalized_image.size(0), -1)
+        flattened_image = flattened_image.permute(1, 0)
 
-    # Flatten the normalized image tensor
-    flattened_image = normalized_image.view(normalized_image.size(0), -1)
-    flattened_image = flattened_image.permute(1, 0)
+        # Pass the flattened image into the decoder to generate the spectral curves
+        generated_curves_tensor = decoder(flattened_image)
 
-    # Pass the flattened image into the decoder to generate the spectral curves
-    generated_curves_tensor = decoder(flattened_image)
+        # print('Generated curves tensor shape:', generated_curves_tensor.shape)
 
-    # print('Generated curves tensor shape:', generated_curves_tensor.shape)
+        # convert back to the right shape 
+        generated_curves = generated_curves_tensor.permute(1, 0).detach().numpy()
+        generated_curves = generated_curves.reshape(num_points, noisy_image.shape[1], noisy_image.shape[2])
 
-    # convert back to the right shape 
-    generated_curves = generated_curves_tensor.permute(1, 0).detach().numpy()
-    generated_curves = generated_curves.reshape(num_points, noisy_image.shape[1], noisy_image.shape[2])
+        # normalize the generated curves to the range [0, 1] for the image as a whole 
+        generated_curves = (generated_curves - generated_curves.min()) / (generated_curves.max() - generated_curves.min())
 
-    # normalize the generated curves to the range [0, 1] for the image as a whole 
-    generated_curves = (generated_curves - generated_curves.min()) / (generated_curves.max() - generated_curves.min())
+        generated_curves_8bit = (generated_curves * 256).astype(np.uint8)
 
-    generated_curves_8bit = (generated_curves * 256).astype(np.uint8)
+        # Save the hyperspectral image to a TIFF file
+        tiff.imwrite(f'{output_dir}/{i}.tiff', generated_curves_8bit)
 
-    # Save the hyperspectral image to a TIFF file
-    tiff.imwrite(f'{output_dir}/{i}.tiff', generated_curves_8bit)
+        print(f'Multi-channel TIFF image saved as {i}.tiff')
+        i+=1
+    else:
+        for order in channel_orders:
+            reordered_tensor = composite_tensor[order, :, :]
+            # print(f'Reordered tensor shape for order {order}:', reordered_tensor.shape)
 
-    print(f'Multi-channel TIFF image saved as {i}.tiff')
+            # Add Gaussian noise
+            noisy_image = add_gaussian_noise(reordered_tensor)
+
+            # Normalize the noisy image to the latent space
+            normalized_image = normalize_to_latent_space(noisy_image, latent_min, latent_max)
+
+            # Flatten the normalized image tensor
+            flattened_image = normalized_image.view(normalized_image.size(0), -1)
+            flattened_image = flattened_image.permute(1, 0)
+
+            # Pass the flattened image into the decoder to generate the spectral curves
+            generated_curves_tensor = decoder(flattened_image)
+
+            # convert back to the right shape 
+            generated_curves = generated_curves_tensor.permute(1, 0).detach().numpy()
+            generated_curves = generated_curves.reshape(num_points, noisy_image.shape[1], noisy_image.shape[2])
+
+            # normalize the generated curves to the range [0, 1] for the image as a whole 
+            generated_curves = (generated_curves - generated_curves.min()) / (generated_curves.max() - generated_curves.min())
+
+            generated_curves_8bit = (generated_curves * 256).astype(np.uint8)
+
+            # Save the hyperspectral image to a TIFF file
+            tiff.imwrite(f'{output_dir}/{i}.tiff', generated_curves_8bit)
+
+            print(f'Multi-channel TIFF image saved as {i}.tiff')
+            i+=1
+            if i >= num_images:
+                break
 

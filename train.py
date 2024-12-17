@@ -39,7 +39,7 @@ from torchvision.transforms import Resize
 from segmentation_models_pytorch.losses import FocalLoss, LovaszLoss, DiceLoss, SoftCrossEntropyLoss
 from transformers import Swinv2Config, Swinv2Model, UperNetConfig, UperNetForSemanticSegmentation
 from transformers import ConvNextV2Config, ConvNextV2Model
-
+from transformers import Swinv2Config, Swinv2Model, UperNetConfig, UperNetForSemanticSegmentation, Swinv2ForMaskedImageModeling
 # tensorboard --logdir=./lightning_logs/
 # ctrl shft p -> Python: Launch Tensorboard  select lightning logs
 
@@ -240,24 +240,24 @@ class BaseSegmentationModel(L.LightningModule):
             self.test_miou = MeanIoU(num_classes=self.num_classes, per_class=False)
             self.val_miou = MeanIoU(num_classes=self.num_classes, per_class=False)
             
-            self.train_confusion_matrix = MulticlassConfusionMatrix(num_classes=self.num_classes, normalize="true", ignore_index=self.ignore_index)
-            self.val_confusion_matrix = MulticlassConfusionMatrix(num_classes=self.num_classes, normalize="true", ignore_index=self.ignore_index)
-            self.test_confusion_matrix = MulticlassConfusionMatrix(num_classes=self.num_classes, normalize="true", ignore_index=self.ignore_index)
+            # self.train_confusion_matrix = MulticlassConfusionMatrix(num_classes=self.num_classes, normalize="true", ignore_index=self.ignore_index)
+            # self.val_confusion_matrix = MulticlassConfusionMatrix(num_classes=self.num_classes, normalize="true", ignore_index=self.ignore_index)
+            # self.test_confusion_matrix = MulticlassConfusionMatrix(num_classes=self.num_classes, normalize="true", ignore_index=self.ignore_index)
             
-            #  Calculate statistics for each label and average them
-            self.train_acc_mean = MulticlassAccuracy(num_classes=self.num_classes, average="macro", ignore_index=self.ignore_index)
-            self.val_acc_mean = MulticlassAccuracy(num_classes=self.num_classes, average="macro", ignore_index=self.ignore_index)
-            self.test_acc_mean = MulticlassAccuracy(num_classes=self.num_classes, average="macro", ignore_index=self.ignore_index)
+            # #  Calculate statistics for each label and average them
+            # self.train_acc_mean = MulticlassAccuracy(num_classes=self.num_classes, average="macro", ignore_index=self.ignore_index)
+            # self.val_acc_mean = MulticlassAccuracy(num_classes=self.num_classes, average="macro", ignore_index=self.ignore_index)
+            # self.test_acc_mean = MulticlassAccuracy(num_classes=self.num_classes, average="macro", ignore_index=self.ignore_index)
             
-            #  Sum statistics over all labels
-            self.train_acc_overall = MulticlassAccuracy(num_classes=self.num_classes, average="micro", ignore_index=self.ignore_index)
-            self.val_acc_overall = MulticlassAccuracy(num_classes=self.num_classes, average="micro", ignore_index=self.ignore_index)
-            self.test_acc_overall = MulticlassAccuracy(num_classes=self.num_classes, average="micro", ignore_index=self.ignore_index)
+            # #  Sum statistics over all labels
+            # self.train_acc_overall = MulticlassAccuracy(num_classes=self.num_classes, average="micro", ignore_index=self.ignore_index)
+            # self.val_acc_overall = MulticlassAccuracy(num_classes=self.num_classes, average="micro", ignore_index=self.ignore_index)
+            # self.test_acc_overall = MulticlassAccuracy(num_classes=self.num_classes, average="micro", ignore_index=self.ignore_index)
         
-            # Mean F1 Score
-            self.train_f1_mean = MulticlassF1Score(num_classes=self.num_classes, average="macro", ignore_index=self.ignore_index)
-            self.val_f1_mean = MulticlassF1Score(num_classes=self.num_classes, average="macro", ignore_index=self.ignore_index)
-            self.test_f1_mean = MulticlassF1Score(num_classes=self.num_classes, average="macro", ignore_index=self.ignore_index)
+            # # Mean F1 Score
+            # self.train_f1_mean = MulticlassF1Score(num_classes=self.num_classes, average="macro", ignore_index=self.ignore_index)
+            # self.val_f1_mean = MulticlassF1Score(num_classes=self.num_classes, average="macro", ignore_index=self.ignore_index)
+            # self.test_f1_mean = MulticlassF1Score(num_classes=self.num_classes, average="macro", ignore_index=self.ignore_index)
 
 
         def forward(self, msi_img, sar_img):
@@ -304,9 +304,9 @@ class BaseSegmentationModel(L.LightningModule):
             if step_type == "train":
                 # result_cf = self.train_confusion_matrix(preds, labels) # not used in training loop
                 result_miou = self.train_miou(preds, labels)
-                result_acc_overall = self.train_acc_overall(preds, labels)
-                results_acc_mean = self.train_acc_mean(preds, labels)
-                results_f1_mean = self.train_f1_mean(preds, labels)
+                # result_acc_overall = self.train_acc_overall(preds, labels)
+                # results_acc_mean = self.train_acc_mean(preds, labels)
+                # results_f1_mean = self.train_f1_mean(preds, labels)
                 # print("train", result_miou, result_acc_overall, results_acc_mean)
                 optimizer = self.optimizers()
                 lr = optimizer.param_groups[0]['lr']
@@ -314,25 +314,25 @@ class BaseSegmentationModel(L.LightningModule):
             elif step_type == "val":
                 # result_cf = self.val_confusion_matrix(preds, labels)
                 result_miou = self.val_miou(preds, labels)
-                result_acc_overall = self.val_acc_overall(preds, labels)
-                results_acc_mean = self.val_acc_mean(preds, labels)
-                results_f1_mean = self.val_f1_mean(preds, labels)
+                # result_acc_overall = self.val_acc_overall(preds, labels)
+                # results_acc_mean = self.val_acc_mean(preds, labels)
+                # results_f1_mean = self.val_f1_mean(preds, labels)
                 # self.log_cf(result_cf, step_type)
             elif step_type == "test":
                 # result_cf = self.test_confusion_matrix(preds, labels)
                 result_miou = self.test_miou(preds, labels)
-                result_acc_overall = self.test_acc_overall(preds, labels)
-                results_acc_mean = self.test_acc_mean(preds, labels)
-                results_f1_mean = self.test_f1_mean(preds, labels)
+                # result_acc_overall = self.test_acc_overall(preds, labels)
+                # results_acc_mean = self.test_acc_mean(preds, labels)
+                # results_f1_mean = self.test_f1_mean(preds, labels)
                 # self.log_cf(result_cf, step_type)
             else:
                 raise ValueError("step_type must be one of 'train', 'val', or 'test'")
             
             self.log(f"{step_type}_loss", loss, on_step=False, on_epoch=True, prog_bar=True, sync_dist=True)
-            self.log(f"{step_type}_accuracy_overall", result_acc_overall, on_step=False, on_epoch=True, prog_bar=True, sync_dist=True)
-            self.log(f"{step_type}_accuracy_mean", results_acc_mean, on_step=False, on_epoch=True, prog_bar=True, sync_dist=True)
+            # self.log(f"{step_type}_accuracy_overall", result_acc_overall, on_step=False, on_epoch=True, prog_bar=True, sync_dist=True)
+            # self.log(f"{step_type}_accuracy_mean", results_acc_mean, on_step=False, on_epoch=True, prog_bar=True, sync_dist=True)
             self.log(f"{step_type}_miou", result_miou, on_step=False, on_epoch=True, prog_bar=True, sync_dist=True)
-            self.log(f"{step_type}_f1_mean", results_f1_mean, on_step=False, on_epoch=True, prog_bar=True, sync_dist=True)
+            # self.log(f"{step_type}_f1_mean", results_f1_mean, on_step=False, on_epoch=True, prog_bar=True, sync_dist=True)
             
         
         def hsi_step(self, batch):
@@ -521,32 +521,86 @@ class swin2_upernet(BaseSegmentationModel):
         super().__init__(num_classes, learning_rate, ignore_index, num_channels, num_workers, train_dataset, val_dataset, test_dataset, batch_size)
 
        
-         
-        self.spectral_adapter = SpectralAdapter_new(num_channels)
+       
+        
+        # self.spectral_adapter = SpectralAdapter_new(num_channels)
         
         seg_head = UperNetConfig(
             
-            backbone="swinv2_config", 
-            use_pretrained_backbone=False,
+            # backbone="swinv2_config_rgb_pretrained", 
+            # backbone="microsoft/swinv2-large-patch4-window12-192-22k", 
+            # backbone="openmmlab_swin_model", 
+            # backbone="microsoft_swin_model", 
+            backbone="microsoft_swin_fractal_pretrained", 
+            
+            # backbone="openmmlab/upernet-swin-large", 
+            # backbone = "microsoft/swin-large-patch4-window7-224",
+            use_pretrained_backbone=True,
             
             # backbone_config=backbone_configuration, 
             
             num_labels = num_classes,    
             out_features=["stage1", "stage2", "stage3", "stage4"],
             use_auxiliary_head=False,
-            num_channels= 128,   
+            num_channels= num_channels,   
             image_size=image_size,   
-            patch_size=patch_size,       
+            patch_size=patch_size,    
+            ignore_mismatched_sizes=True   
         )                   
-        self.backbone_upernet = UperNetForSemanticSegmentation(seg_head)
+        self.backbone_upernet_test = UperNetForSemanticSegmentation(seg_head)
+        
+        
+        # sys.exit()
+        # self.backbone_upernet = UperNetForSemanticSegmentation.from_pretrained("openmmlab/upernet-swin-large", num_labels=num_classes, ignore_mismatched_sizes=True)
+        self.backbone_upernet = UperNetForSemanticSegmentation.from_pretrained(pretrained_model_name_or_path = "microsoft_upernet_model",    num_labels=num_classes, ignore_mismatched_sizes=True )
+        
+        # print(self.backbone_upernet.backbone.embeddings.patch_embeddings.projection)
+        
+        # print(self.backbone_upernet.backbone.embeddings)
+        # sys.exit()
+        
+        # print(self.backbone_upernet.backbone) 
+              
+        self.backbone_upernet.backbone = self.backbone_upernet_test.backbone
+        
+        # # # if self.backbone_upernet.config.num_channels != num_channels:
+        # self.backbone_upernet.backbone.embeddings.patch_embeddings.projection = nn.Conv2d(
+        #     num_channels,
+        #     self.backbone_upernet.backbone.config.embed_dim,
+        #     kernel_size=patch_size,
+        #     stride=patch_size
+        # )
+        # self.backbone_upernet.config.num_channels = num_channels
+        # self.backbone_upernet.backbone.config.num_channels = num_channels
+        # # print(self.backbone_upernet.config.num_channels)
+        # # print(self.backbone_upernet.backbone.config.num_channels)
+        
+        # # print(self.backbone_upernet.backbone.embeddings.patch_embeddings.projection)
+        # self.backbone_upernet.save_pretrained("microsoft_upernet_model")
+        # self.backbone_upernet_test.backbone.save_pretrained("microsoft_swin_model")
+        # # sys.exit()
+        
+        # self.backbone_upernet.save_pretrained("openmmlab_upernet_model")
+        
+        # print(self.backbone_upernet.backbone.embeddings.patch_embeddings.projection)
+        # sys.exit()
+        
+        set_no_grad_on_backbone(self.backbone_upernet)
+        
+        # print(self.backbone_upernet.backbone.embeddings.patch_embeddings.projection)
+        # sys.exit()
+        self.backbone_upernet.train()
         
 
 
     def forward(self, hsi_img, rgb_img):
-        feature_img = self.spectral_adapter(hsi_img)
-        outputs = self.backbone_upernet(feature_img)
+        # feature_img = self.spectral_adapter(hsi_img)
+        outputs = self.backbone_upernet(hsi_img)
         return outputs.logits
-               
+
+
+
+                       
 dataset_dir='/workspaces/LIB-HSI'
 rgb_data_json = '/workspaces/fractal-pretraining/lib_hsi_rgb.json'
 file_data =  open(rgb_data_json)
@@ -613,6 +667,13 @@ val_dataset = LIBHSIDataset(image_set="validation", root_dir=dataset_dir, id2col
 
 
 # model = convnext_upernet(num_classes=num_classes,learning_rate=initial_lr, ignore_index=ignore_index, num_channels= num_channels, num_workers=num_workers,  train_dataset=train_dataset,val_dataset=val_dataset, test_dataset=test_dataset, batch_size=batch_size, image_size=img_height)
+# pretrained_model = swin2_model.load_from_checkpoint('lightning_logs/version_22/checkpoints/lowest_val_loss_hsi.ckpt')
+# sample_msi_img = torch.randn(batch_size, num_channels, img_height, img_height).to("cuda")  # Example shape
+# sample_rgb_img = torch.randn(batch_size, 3, img_height, img_height).to("cuda")  # Example shape for RGB image
+# # # # Pass the sample input through the model
+# output = pretrained_model.forward(sample_msi_img, sample_rgb_img)
+# sys.exit()
+
 model = swin2_upernet(num_classes=num_classes,learning_rate=initial_lr, ignore_index=ignore_index, num_channels= num_channels, num_workers=num_workers,  train_dataset=train_dataset,val_dataset=val_dataset, test_dataset=test_dataset, batch_size=batch_size, image_size=img_height)
 
 
@@ -669,7 +730,7 @@ if training_model == True:
 
 if test_model:
     
-    model = convnext_upernet.load_from_checkpoint("lightning_logs/version_4/checkpoints/lowest_val_loss_hsi.ckpt")
+    model = swin2_upernet.load_from_checkpoint("lightning_logs/version_36/checkpoints/lowest_val_loss_hsi.ckpt")
 
     model.eval()
 

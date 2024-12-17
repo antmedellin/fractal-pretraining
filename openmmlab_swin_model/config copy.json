@@ -1,7 +1,7 @@
 {
-  "_name_or_path": "microsoft/swinv2-large-patch4-window12-192-22k",
+  "_name_or_path": "openmmlab_swin_model",
   "architectures": [
-    "Swinv2ForMaskedImageModeling"
+    "SwinBackbone"
   ],
   "attention_probs_dropout_prob": 0.0,
   "depths": [
@@ -16,20 +16,12 @@
   "hidden_act": "gelu",
   "hidden_dropout_prob": 0.0,
   "hidden_size": 1536,
-  "id2label": {
-    "0": "background",
-    "1": "object"
-  },
-  "image_size": 256,
+  "image_size": 224,
   "initializer_range": 0.02,
-  "label2id": {
-    "background": 0,
-    "object": 1
-  },
   "layer_norm_eps": 1e-05,
   "mlp_ratio": 4.0,
-  "model_type": "swinv2",
-  "num_channels": 128,
+  "model_type": "swin",
+  "num_channels": 204,
   "num_heads": [
     6,
     12,
@@ -38,19 +30,19 @@
   ],
   "num_layers": 4,
   "out_features": [
+    "stage1",
+    "stage2",
+    "stage3",
     "stage4"
   ],
   "out_indices": [
+    1,
+    2,
+    3,
     4
   ],
   "patch_size": 4,
   "path_norm": true,
-  "pretrained_window_sizes": [
-    0,
-    0,
-    0,
-    0
-  ],
   "qkv_bias": true,
   "stage_names": [
     "stem",

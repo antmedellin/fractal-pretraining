@@ -1,5 +1,6 @@
 {
   "_name_or_path": "microsoft/swinv2-large-patch4-window12-192-22k",
+
   "architectures": [
     "Swinv2ForMaskedImageModeling"
   ],

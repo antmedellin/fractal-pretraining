@@ -22,7 +22,7 @@ from timm.models.layers import trunc_normal_, DropPath
 from transformers import ConvNextConfig, ConvNextModel
 from transformers import Swinv2Config, Swinv2Model
 from convnextv2 import convnextv2_atto
-from transformers import Swinv2Config, Swinv2Model, UperNetConfig, UperNetForSemanticSegmentation, Swinv2ForMaskedImageModeling
+from transformers import Swinv2Config, Swinv2Model, UperNetConfig, UperNetForSemanticSegmentation, Swinv2ForMaskedImageModeling, SwinForMaskedImageModeling
 from transformers import AutoConfig
 
 
@@ -448,7 +448,7 @@ class swin2_model(BaseSegmentationModel):
         #spectral adapter 
         
         #need to verify the spectral adapter for 1d convolutions to match paper, this is just a temp one right now 
-        self.spectral_adapter = SpectralAdapter_new(num_channels)
+        # self.spectral_adapter = SpectralAdapter_new(num_channels)
         
         # swin2 model 
 
@@ -495,7 +495,7 @@ class swin2_model(BaseSegmentationModel):
         # configuration = AutoConfig.from_pretrained("microsoft/swinv2-large-patch4-window12-192-22k", id2label={0: "background", 1: "object"}, label2id={"background": 0, "object": 1}, num_channels = 128, image_size = image_size)
         
         # # self.backbone = Swinv2Model(configuration)
-        # # print(self.backbone)
+        # # # print(self.backbone)
         # self.backbone = Swinv2ForMaskedImageModeling(configuration)
         # # self.backbone = Swinv2Model.from_pretrained("microsoft/swinv2-large-patch4-window12-192-22k", id2label={0: "background", 1: "object"}, label2id={"background": 0, "object": 1})
         
@@ -507,31 +507,70 @@ class swin2_model(BaseSegmentationModel):
         
         # # decoder used for SimMIM
         
+        # use pretrained config 
         
+        
+        # configuration = AutoConfig.from_pretrained("microsoft/swinv2-large-patch4-window12-192-22k", id2label={0: "background", 1: "object"}, label2id={"background": 0, "object": 1}, num_channels = 128, image_size = image_size)
+        # # # print(self.backbone)
+        # self.backbone = Swinv2ForMaskedImageModeling(configuration)
         # use pretrained model instead of just the config for it 
         
         # Load pre-trained SwinV2 model
-        self.backbone = Swinv2ForMaskedImageModeling.from_pretrained(
-            "microsoft/swinv2-large-patch4-window12-192-22k",
-            ignore_mismatched_sizes=True, id2label={0: "background", 1: "object"}, label2id={"background": 0, "object": 1}, image_size=image_size, num_channels=128
+        # self.backbone = Swinv2ForMaskedImageModeling.from_pretrained(
+        #     "microsoft/swinv2-large-patch4-window12-192-22k",
+        #     ignore_mismatched_sizes=True, id2label={0: "background", 1: "object"}, label2id={"background": 0, "object": 1}, image_size=image_size, num_channels=num_channels
+        # )
+        
+        self.backbone = SwinForMaskedImageModeling.from_pretrained(
+            # "openmmlab_swin_model",
+            "microsoft_swin_model",
+            # "microsoft/swin-large-patch4-window7-224",
+            ignore_mismatched_sizes=True, image_size=image_size, num_channels=num_channels
         )
         
+        # print(self.backbone.config.num_channels)
+        # print(self.backbone)
         
-        # print(self.backbone.swinv2.embeddings)
+        # self.backbone2 = SwinForMaskedImageModeling.from_pretrained(
+        #     # "openmmlab_swin_model",
+        #     "microsoft/swin-large-patch4-window7-224",
+        #     ignore_mismatched_sizes=True, image_size=image_size, num_channels=num_channels
+        # )
+        # print(self.backbone1)
+        # # print(self.backbone.config.num_channels)
+        # print(self.backbone.swin.embeddings)
+        # def compare_parameters(model1, model2):
+        #     model1_params = dict(model1.named_parameters())
+        #     model2_params = dict(model2.named_parameters())
+
+        #     for name, param in model1_params.items():
+        #         if name in model2_params:
+        #             if not torch.equal(param, model2_params[name]):
+        #                 print(f"Parameter {name} is different.")
+        #             pass
+        #         else:
+        #             print(f"Parameter {name} is not in model 2.")
+
+        #     for name in model2_params:
+        #         if name not in model1_params:
+        #             print(f"Parameter {name} is not in model 1.")
+
+        # compare_parameters(self.backbone2, self.backbone1)
         # sys.exit()
         # Adjust the input channels if necessary
-        if self.backbone.config.num_channels != 128:
-            self.backbone.swinv2.embeddings.patch_embeddings.projection = nn.Conv2d(
-                128,
-                self.backbone.config.embed_dim,
-                kernel_size=self.backbone.config.patch_size,
-                stride=self.backbone.config.patch_size
-            )
-            self.backbone.config.num_channels = 128
+        # if self.backbone.config.num_channels != num_channels:
+        #     self.backbone.swinv2.embeddings.patch_embeddings.projection = nn.Conv2d(
+        #         num_channels,
+        #         self.backbone.config.embed_dim,
+        #         kernel_size=self.backbone.config.patch_size,
+        #         stride=self.backbone.config.patch_size
+        #     )
+        #     self.backbone.config.num_channels = num_channels
         
         # print(self.backbone.swinv2.embeddings.mask_token)
         # print(self.backbone.config)
         # sys.exit()
+        self.backbone.train()
         
     def forward(self, hsi_img, mask):
         
@@ -542,13 +581,13 @@ class swin2_model(BaseSegmentationModel):
         # hsi_img = hsi_img.view(batch_size , height * width, channels)
     
         # print(hsi_img.shape)
-        feature_img = self.spectral_adapter(hsi_img)
+        # feature_img = self.spectral_adapter(hsi_img)
         # print(feature_img.shape)
         # Reshape the output back to (batch_size, new_channels, height, width)
         # x = x.view(batch_size, x.size(1), height, width)
         # print(x.shape)
 
-        x = self.backbone(feature_img, bool_masked_pos = mask)
+        x = self.backbone(hsi_img, bool_masked_pos = mask)
         # print(x.reconstruction.shape)
         # print(x.loss)
        
@@ -586,7 +625,7 @@ test_img = full_dataset[0]
 # plt.imshow(test_img[50])
 # plt.show()
 num_channels = test_img.shape[0]
-img_height = 256
+img_height = 256 #256
 img_width = 256
 
 mask_generator = MaskGenerator(input_size=img_height, mask_patch_size=32, model_patch_size=patch_size, mask_ratio=mask_ratio)
@@ -640,7 +679,7 @@ val_dataset.dataset.transform = test_transform
 # model = convnext2_model(learning_rate=initial_lr, num_channels= num_channels, num_workers=num_workers,  train_dataset=train_dataset,val_dataset=val_dataset, batch_size=batch_size, image_size=img_height, training_epochs=max_epochs, patch_size=patch_size)
 
 model = swin2_model(learning_rate=initial_lr, num_channels= num_channels, num_workers=num_workers,  train_dataset=train_dataset,val_dataset=val_dataset, batch_size=batch_size, image_size=img_height, training_epochs=max_epochs, patch_size=patch_size)
-# model = swin2_model.load_from_checkpoint('lightning_logs/version_18/checkpoints/lowest_val_loss_hsi.ckpt')
+# model = swin2_model.load_from_checkpoint('lightning_logs/version_47/checkpoints/lowest_val_loss_hsi.ckpt').to("cuda")
 
 checkpoint_callback_val_loss = ModelCheckpoint(monitor="val_loss", mode="min", save_top_k=1, filename="lowest_val_loss_hsi")
 # Set the float32 matmul precision to 'medium' or 'high'
@@ -662,22 +701,22 @@ model.hparams.learning_rate = initial_lr  # learning_rate
 model.hparams.batch_size = batch_size
 
 
-# sample_hsi_img = torch.rand(batch_size, num_channels, img_height, img_width)#.to("cuda")
-# sample_mask = torch.stack([mask_generator() for i in range(batch_size)], dim=0)#.to("cuda")
-# # print( sample_mask.shape)
-# output = model.forward(sample_hsi_img, sample_mask)
+sample_hsi_img = torch.rand(batch_size, num_channels, img_height, img_width)#.to("cuda")
+sample_mask = torch.stack([mask_generator() for i in range(batch_size)], dim=0)#.to("cuda")
+# print( sample_mask.shape)
+output = model.forward(sample_hsi_img, sample_mask)
 
 
 # sys.exit()
 
-trainer.fit(model)
+# trainer.fit(model)
 
-# # # load the model and save as huggingface model
-model = swin2_model.load_from_checkpoint('lightning_logs/version_19/checkpoints/lowest_val_loss_hsi.ckpt')
+# # # # load the model and save as huggingface model
+model = swin2_model.load_from_checkpoint('lightning_logs/version_48/checkpoints/lowest_val_loss_hsi.ckpt')
 
-# # only save backbone encoder
-# print(model.spectral_adapter, model.backbone)
-# backbone = model.backbone
-torch.save(model.state_dict(), "swinv2_config/full_model.pth")
-model.backbone.save_pretrained("swinv2_config")
-print("model saved")
+# # # # only save backbone encoder
+# # # print(model.spectral_adapter, model.backbone)
+backbone = model.backbone
+# # torch.save(model.state_dict(), "swinv2_config/full_model.pth")
+model.backbone.save_pretrained("microsoft_swin_fractal_pretrained")
+# print("model saved")
