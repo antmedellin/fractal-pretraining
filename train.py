@@ -530,12 +530,11 @@ class swin2_upernet(BaseSegmentationModel):
             # backbone="swinv2_config_rgb_pretrained", 
             # backbone="microsoft/swinv2-large-patch4-window12-192-22k", 
             # backbone="openmmlab_swin_model", 
-            # backbone="microsoft_swin_model", 
-            backbone="microsoft_swin_fractal_pretrained", 
-            
+            backbone="microsoft_swin_model", 
+            # backbone="microsoft_swin_fractal_pretrained", 
             # backbone="openmmlab/upernet-swin-large", 
             # backbone = "microsoft/swin-large-patch4-window7-224",
-            use_pretrained_backbone=True,
+            use_pretrained_backbone=False,
             
             # backbone_config=backbone_configuration, 
             
@@ -549,10 +548,14 @@ class swin2_upernet(BaseSegmentationModel):
         )                   
         self.backbone_upernet_test = UperNetForSemanticSegmentation(seg_head)
         
+        self.backbone_upernet = UperNetForSemanticSegmentation.from_pretrained(pretrained_model_name_or_path = "microsoft_upernet_model",    num_labels=num_classes, ignore_mismatched_sizes=True )
+    
+        self.backbone_upernet.backbone = self.backbone_upernet_test.backbone
+       
+        self.backbone_upernet.train()
         
         # sys.exit()
         # self.backbone_upernet = UperNetForSemanticSegmentation.from_pretrained("openmmlab/upernet-swin-large", num_labels=num_classes, ignore_mismatched_sizes=True)
-        self.backbone_upernet = UperNetForSemanticSegmentation.from_pretrained(pretrained_model_name_or_path = "microsoft_upernet_model",    num_labels=num_classes, ignore_mismatched_sizes=True )
         
         # print(self.backbone_upernet.backbone.embeddings.patch_embeddings.projection)
         
@@ -561,8 +564,7 @@ class swin2_upernet(BaseSegmentationModel):
         
         # print(self.backbone_upernet.backbone) 
               
-        self.backbone_upernet.backbone = self.backbone_upernet_test.backbone
-        
+              
         # # # if self.backbone_upernet.config.num_channels != num_channels:
         # self.backbone_upernet.backbone.embeddings.patch_embeddings.projection = nn.Conv2d(
         #     num_channels,
@@ -585,11 +587,10 @@ class swin2_upernet(BaseSegmentationModel):
         # print(self.backbone_upernet.backbone.embeddings.patch_embeddings.projection)
         # sys.exit()
         
-        set_no_grad_on_backbone(self.backbone_upernet)
+        # set_no_grad_on_backbone(self.backbone_upernet)
         
         # print(self.backbone_upernet.backbone.embeddings.patch_embeddings.projection)
         # sys.exit()
-        self.backbone_upernet.train()
         
 
 
@@ -629,9 +630,9 @@ img_height = 256  #512
 img_width = 256  #256
 max_num_epochs = 1000
 grad_clip_val = 5 # clip gradients that have norm bigger than tmax_val)his
-training_model = True
+training_model = False
 tuning_model = False
-test_model = False
+test_model = True
 num_channels = 204
 
 
@@ -730,7 +731,7 @@ if training_model == True:
 
 if test_model:
     
-    model = swin2_upernet.load_from_checkpoint("lightning_logs/version_36/checkpoints/lowest_val_loss_hsi.ckpt")
+    model = swin2_upernet.load_from_checkpoint("lightning_logs/version_59/checkpoints/lowest_val_loss_hsi.ckpt")
 
     model.eval()
 

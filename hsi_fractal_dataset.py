@@ -78,17 +78,17 @@ def normalize_to_latent_space(image, latent_min, latent_max):
 
 # Generate 10,000 random spectral curves
 num_curves = 10000 # samples to train decoder
-num_points = 204  # Number of points in each spectral curve aka number of bands 
+num_points = 202  # Number of points in each spectral curve aka number of bands 
 sigma = 6  # Standard deviation for Gaussian kernel
 num_curves_to_plot = 5
 num_epochs = 1000
-num_images = 20 # number of images to generate # each image is 13.5 MB 
-output_dir = 'output'
+num_images = 20 # 538974  # number of images to generate # each image is 13.5 MB 
+output_dir = 'output_test'
 train_decoder = False
 # if train_decoder is False then the decoder is loaded from the file
 # also need latent min and max 
-latent_min = [-1.14451  , -0.9793242 , -1.0160341]
-latent_max = [1.0071142 , 1.1114244 , 1.0671806]
+latent_min = [-1.030541 ,-1.2960982  , -1.2237175]
+latent_max = [1.0226583,  1.125268 ,  1.0416892]
 time_series = True
 
 # make sure the output directory exists
@@ -183,7 +183,7 @@ while i < num_images:
 
     # create a random colored background
     background = diamondsquare.colorized_ds()
-
+ 
     # create a composite image
     composite = background.copy()
     composite[gray_image.nonzero()] = color_image[gray_image.nonzero()]
@@ -191,6 +191,12 @@ while i < num_images:
 
     # Assuming composite is a NumPy array of shape (H, W, C)
     composite_tensor = torch.tensor(composite.transpose(2, 0, 1), dtype=torch.float32) / 255.0
+    
+    # print(composite_tensor.shape) # default is 3x256x256
+    # sys.exit()
+    #resize image 128x128
+    composite_tensor = F.interpolate(composite_tensor.unsqueeze(0), size=(128, 128), mode='bilinear', align_corners=False).squeeze(0)
+
 
     # print('Composite tensor shape:', composite_tensor.shape)
     # sys.exit()
