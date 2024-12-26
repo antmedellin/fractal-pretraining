@@ -1,5 +1,5 @@
 
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 import torchvision.transforms as transforms
 import torch
 from fractal_learning.fractals import ifs, diamondsquare
@@ -14,6 +14,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 import tifffile as tiff
 import os
+
 
 # Add Gaussian noise
 def add_gaussian_noise(image, mean=0.0, std=0.03):
@@ -83,7 +84,7 @@ sigma = 6  # Standard deviation for Gaussian kernel
 num_curves_to_plot = 5
 num_epochs = 1000
 num_images = 20 # 538974  # number of images to generate # each image is 13.5 MB 
-output_dir = 'output_test'
+output_dir ='output_test' # '/scratch/user/antmedellin/data/fractals'
 train_decoder = False
 # if train_decoder is False then the decoder is loaded from the file
 # also need latent min and max 
@@ -169,7 +170,7 @@ channel_orders = [
 ]
 
 # after the decoder is trained we can use it on images 
-i=0
+i= 0 # 517696  #445513  # 373782  # 298238  #230916 #154632 #76279
 while i < num_images:
 # for i in range(num_images):
     
@@ -226,7 +227,7 @@ while i < num_images:
         generated_curves_8bit = (generated_curves * 256).astype(np.uint8)
 
         # Save the hyperspectral image to a TIFF file
-        tiff.imwrite(f'{output_dir}/{i}.tiff', generated_curves_8bit)
+        # tiff.imwrite(f"{output_dir}/{i}.tiff", generated_curves_8bit)
 
         print(f'Multi-channel TIFF image saved as {i}.tiff')
         i+=1
@@ -258,7 +259,7 @@ while i < num_images:
             generated_curves_8bit = (generated_curves * 256).astype(np.uint8)
 
             # Save the hyperspectral image to a TIFF file
-            tiff.imwrite(f'{output_dir}/{i}.tiff', generated_curves_8bit)
+            tiff.imwrite(f"{output_dir}/{i}.tiff", generated_curves_8bit)
 
             print(f'Multi-channel TIFF image saved as {i}.tiff')
             i+=1

@@ -19,13 +19,12 @@ from lightning.pytorch.callbacks import ModelCheckpoint
 from torch.optim.lr_scheduler import CosineAnnealingLR, SequentialLR, LinearLR
 from transformers import ConvNextV2Config, ConvNextV2Model
 from timm.models.layers import trunc_normal_, DropPath
+# from timm.layers import trunc_normal_, DropPath
 from transformers import ConvNextConfig, ConvNextModel
 from transformers import Swinv2Config, Swinv2Model
 from convnextv2 import convnextv2_atto
 from transformers import Swinv2Config, Swinv2Model, UperNetConfig, UperNetForSemanticSegmentation, Swinv2ForMaskedImageModeling, SwinForMaskedImageModeling
 from transformers import AutoConfig
-
-
 
 
 def collate_fn(inputs):    
@@ -625,8 +624,8 @@ test_img = full_dataset[0]
 # plt.imshow(test_img[50])
 # plt.show()
 num_channels = test_img.shape[0]
-img_height = 256 #256
-img_width = 256
+img_height = 128 #256 #256
+img_width =128 # 256
 
 mask_generator = MaskGenerator(input_size=img_height, mask_patch_size=32, model_patch_size=patch_size, mask_ratio=mask_ratio)
 
@@ -707,7 +706,7 @@ sample_mask = torch.stack([mask_generator() for i in range(batch_size)], dim=0)#
 output = model.forward(sample_hsi_img, sample_mask)
 
 
-# sys.exit()
+sys.exit()
 
 # trainer.fit(model)
 
