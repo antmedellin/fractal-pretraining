@@ -1,5 +1,5 @@
 {
-  "_name_or_path": "microsoft_swin_model",
+  "_name_or_path": "microsoft/swin-large-patch4-window7-224",
   "architectures": [
     "SwinBackbone"
   ],
@@ -2024,7 +2024,7 @@
   "layer_norm_eps": 1e-05,
   "mlp_ratio": 4.0,
   "model_type": "swin",
-  "num_channels": 204,
+  "num_channels": 3,
   "num_heads": [
     6,
     12,

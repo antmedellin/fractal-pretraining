@@ -514,7 +514,7 @@ class SpectralAdapter_new(nn.Module):
         # x = x.view(x.size(0), -1)  # Flatten the output
         return x
     
-class swin2_upernet(BaseSegmentationModel):
+class swin_upernet(BaseSegmentationModel):
     def __init__(self, num_classes, learning_rate=1e-3, ignore_index=0, num_channels=12, num_workers=4, train_dataset=None, val_dataset=None, test_dataset=None, batch_size=2, patch_size=4, image_size=256):
 
    
@@ -523,55 +523,72 @@ class swin2_upernet(BaseSegmentationModel):
        
        
         
-        # self.spectral_adapter = SpectralAdapter_new(num_channels)
-        
+                
         seg_head = UperNetConfig(
             
-            # backbone="swinv2_config_rgb_pretrained", 
-            # backbone="microsoft/swinv2-large-patch4-window12-192-22k", 
-            # backbone="openmmlab_swin_model", 
-            backbone="microsoft_swin_model", 
-            # backbone="microsoft_swin_fractal_pretrained", 
-            # backbone="openmmlab/upernet-swin-large", 
+          
+             
             # backbone = "microsoft/swin-large-patch4-window7-224",
-            use_pretrained_backbone=False,
+            backbone = "microsoft_swin_model_not_pretrained",
+            # backbone = "microsoft_swin_model_pretrained",
+            # backbone="microsoft_swin_fractal_pretrained_224",
+            
+            
+            use_pretrained_backbone=True,
             
             # backbone_config=backbone_configuration, 
             
             num_labels = num_classes,    
             out_features=["stage1", "stage2", "stage3", "stage4"],
-            use_auxiliary_head=False,
+            out_indices=[ 1, 2, 3, 4],
             num_channels= num_channels,   
             image_size=image_size,   
-            patch_size=patch_size,    
             ignore_mismatched_sizes=True   
         )                   
-        self.backbone_upernet_test = UperNetForSemanticSegmentation(seg_head)
+        self.backbone_pretrained = UperNetForSemanticSegmentation(seg_head)
         
-        self.backbone_upernet = UperNetForSemanticSegmentation.from_pretrained(pretrained_model_name_or_path = "microsoft_upernet_model",    num_labels=num_classes, ignore_mismatched_sizes=True )
-    
-        self.backbone_upernet.backbone = self.backbone_upernet_test.backbone
-       
-        self.backbone_upernet.train()
+        # self.backbone_pretrained.backbone.save_pretrained("microsoft_swin_model_not_pretrained")
+
+        # sys.exit()
+        
+        self.upernet = UperNetForSemanticSegmentation.from_pretrained(
+            # pretrained_model_name_or_path = "microsoft_test_upernet_model",    
+            pretrained_model_name_or_path = "openmmlab_upernet_model", 
+            num_labels = num_classes, 
+            ignore_mismatched_sizes=True )
+        
+        # self.upernet.backbone.save_pretrained("openmmlab_swin_model")
         
         # sys.exit()
+        
+        
+        self.upernet.backbone = self.backbone_pretrained.backbone
+       
+        self.upernet.backbone.embeddings.patch_embeddings.projection = nn.Conv2d(
+            num_channels,
+            self.upernet.backbone.config.embed_dim,
+            kernel_size=patch_size,
+            stride=patch_size
+        )
+        
+        self.upernet.config.num_channels = num_channels
+        self.upernet.backbone.config.num_channels = num_channels
+        
+        # print(self.upernet.backbone.embeddings.patch_embeddings.projection)
+        # self.backbone_upernet.backbone.save_pretrained("microsoft_swin_model_not_pretrained")
+        
+        self.upernet.train()
+        
+        
+        # sys.exit()
+        
+        
+        
         # self.backbone_upernet = UperNetForSemanticSegmentation.from_pretrained("openmmlab/upernet-swin-large", num_labels=num_classes, ignore_mismatched_sizes=True)
         
-        # print(self.backbone_upernet.backbone.embeddings.patch_embeddings.projection)
-        
-        # print(self.backbone_upernet.backbone.embeddings)
-        # sys.exit()
-        
+    
         # print(self.backbone_upernet.backbone) 
-              
-              
-        # # # if self.backbone_upernet.config.num_channels != num_channels:
-        # self.backbone_upernet.backbone.embeddings.patch_embeddings.projection = nn.Conv2d(
-        #     num_channels,
-        #     self.backbone_upernet.backbone.config.embed_dim,
-        #     kernel_size=patch_size,
-        #     stride=patch_size
-        # )
+             
         # self.backbone_upernet.config.num_channels = num_channels
         # self.backbone_upernet.backbone.config.num_channels = num_channels
         # # print(self.backbone_upernet.config.num_channels)
@@ -580,23 +597,15 @@ class swin2_upernet(BaseSegmentationModel):
         # # print(self.backbone_upernet.backbone.embeddings.patch_embeddings.projection)
         # self.backbone_upernet.save_pretrained("microsoft_upernet_model")
         # self.backbone_upernet_test.backbone.save_pretrained("microsoft_swin_model")
-        # # sys.exit()
-        
-        # self.backbone_upernet.save_pretrained("openmmlab_upernet_model")
-        
-        # print(self.backbone_upernet.backbone.embeddings.patch_embeddings.projection)
-        # sys.exit()
         
         # set_no_grad_on_backbone(self.backbone_upernet)
         
-        # print(self.backbone_upernet.backbone.embeddings.patch_embeddings.projection)
-        # sys.exit()
         
 
 
     def forward(self, hsi_img, rgb_img):
         # feature_img = self.spectral_adapter(hsi_img)
-        outputs = self.backbone_upernet(hsi_img)
+        outputs = self.upernet(hsi_img)
         return outputs.logits
 
 
@@ -616,8 +625,8 @@ for i, item in enumerate(file_contents['items'], start=0):
 num_classes = len(id2label)
 num_classes = len(id2label)
 
-batch_size = 4
-accumulate_grad_batches = 8 # increases the effective batch size  # 1 means no accumulation # more important when batch size is small or not doing multi gpu training
+batch_size = 8
+accumulate_grad_batches = 4 # increases the effective batch size  # 1 means no accumulation # more important when batch size is small or not doing multi gpu training
 
 ignore_index=7 # misc. class, 
 
@@ -626,8 +635,8 @@ initial_lr =  3e-4  # .001 for smp, 3e-4 for transformer
 swa_lr = 0.01
 # these should be multiple of 14 for dino model 
 # input image is of size 256x256
-img_height = 256  #512
-img_width = 256  #256
+img_height = 224 #256  #512
+img_width = 224 #256  #256
 max_num_epochs = 1000
 grad_clip_val = 5 # clip gradients that have norm bigger than tmax_val)his
 training_model = False
@@ -675,16 +684,16 @@ val_dataset = LIBHSIDataset(image_set="validation", root_dir=dataset_dir, id2col
 # output = pretrained_model.forward(sample_msi_img, sample_rgb_img)
 # sys.exit()
 
-model = swin2_upernet(num_classes=num_classes,learning_rate=initial_lr, ignore_index=ignore_index, num_channels= num_channels, num_workers=num_workers,  train_dataset=train_dataset,val_dataset=val_dataset, test_dataset=test_dataset, batch_size=batch_size, image_size=img_height)
+model = swin_upernet(num_classes=num_classes,learning_rate=initial_lr, ignore_index=ignore_index, num_channels= num_channels, num_workers=num_workers,  train_dataset=train_dataset,val_dataset=val_dataset, test_dataset=test_dataset, batch_size=batch_size, image_size=img_height)
 
 
 
-# # Create a sample input tensor with the appropriate shape
-# # Adjust the shape according to your model's expected input
-# sample_msi_img = torch.randn(batch_size, num_channels, img_height, img_height)  # Example shape
-# sample_rgb_img = torch.randn(batch_size, 3, img_height, img_height)  # Example shape for RGB image
-# # # # Pass the sample input through the model
-# output = model.forward(sample_msi_img, sample_rgb_img)
+# Create a sample input tensor with the appropriate shape
+# Adjust the shape according to your model's expected input
+sample_msi_img = torch.randn(batch_size, num_channels, img_height, img_height)  # Example shape
+sample_rgb_img = torch.randn(batch_size, 3, img_height, img_height)  # Example shape for RGB image
+# # # Pass the sample input through the model
+output = model.forward(sample_msi_img, sample_rgb_img)
 # sys.exit()
 
 checkpoint_callback_val_loss = ModelCheckpoint(monitor="val_loss", mode="min", save_top_k=1, filename="lowest_val_loss_hsi")
@@ -731,7 +740,7 @@ if training_model == True:
 
 if test_model:
     
-    model = swin2_upernet.load_from_checkpoint("lightning_logs/version_59/checkpoints/lowest_val_loss_hsi.ckpt")
+    model = swin_upernet.load_from_checkpoint("lightning_logs/version_59/checkpoints/lowest_val_loss_hsi.ckpt")
 
     model.eval()
 
