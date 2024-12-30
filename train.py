@@ -42,6 +42,8 @@ from transformers import ConvNextV2Config, ConvNextV2Model
 from transformers import Swinv2Config, Swinv2Model, UperNetConfig, UperNetForSemanticSegmentation, Swinv2ForMaskedImageModeling
 # tensorboard --logdir=./lightning_logs/
 # ctrl shft p -> Python: Launch Tensorboard  select lightning logs
+from torch.utils.data import random_split
+import tifffile as tiff
 
    
 def extract_rgb(cube, red_layer=70 , green_layer=53, blue_layer=19):
@@ -160,29 +162,105 @@ class LIBHSIDataset(Dataset):
         hsi_path = join(self.img_dir, self.img_names[idx])
         _, hsi_img = GDAL_imreadmulti(hsi_path)
    
-        rgb_img = extract_rgb(hsi_img) 
+        # rgb_img = extract_rgb(hsi_img) 
 
         hsi_img = np.transpose(hsi_img, (1, 2, 0)) # transpose to x,y,channels for albumnetations
         
         # apply transformations  # must be in x,y,channels format        
         if self.transform:            
-            transformed = self.transform(image = rgb_img, mask = label_img_greyscale, hsi_image = hsi_img)
+            transformed = self.transform(image = hsi_img, mask = label_img_greyscale)
         
-            hsi_img, rgb_img, label_img_greyscale = torch.tensor(transformed['hsi_image']), torch.tensor(transformed['image']), torch.tensor(transformed['mask'])
+            hsi_img,  label_img_greyscale =  torch.tensor(transformed['image']), torch.tensor(transformed['mask'])
         else:
-            hsi_img, rgb_img, label_img_greyscale = torch.tensor(hsi_img), torch.tensor(rgb_img), torch.tensor(label_img_greyscale)
+            hsi_img,  label_img_greyscale = torch.tensor(hsi_img), torch.tensor(label_img_greyscale)
             
             
         #convert from x,y,channels to channels, x, y
         hsi_img = hsi_img.permute(2,0,1)
-        rgb_img = rgb_img.permute(2,0,1)
         
         #convert from uint8 to float32
         hsi_img = hsi_img.float()
-        rgb_img = rgb_img.float()
             
-        return hsi_img, rgb_img, label_img_greyscale   
+        return hsi_img,  label_img_greyscale   
     
+class ENMAP_CDL(Dataset):
+    def __init__(self,  data_dir, label_dir,   transform=None):
+        
+        # image_set # train ,test, validation
+        self.transform = transform
+      
+
+        self.img_dir =  data_dir
+        self.label_dir = label_dir
+        
+      
+        
+        self.img_labels = []
+        self.img_names = []
+        for root, _, files in os.walk(self.label_dir):
+            for file in files:
+                if file.endswith('.tif'):
+                    # self.img_labels.append(os.path.join(root, file))
+                    # self.img_names.append(os.path.join(self.img_dir, root.split("/")[-1], file))
+                    label_path = os.path.join(root, file)
+                    img_path = os.path.join(self.img_dir, root.split("/")[-1], file)
+                    if os.path.exists(img_path):
+                        self.img_labels.append(label_path)
+                        self.img_names.append(img_path)
+        
+        
+        # print(len(self.img_labels), len(self.img_names))
+        self.num_images = len( self.img_labels  ) 
+
+        # sort img_names and img_labels
+        self.img_names.sort()
+        self.img_labels.sort()
+        
+
+    def __len__(self):
+        return self.num_images
+
+    def __getitem__(self, idx):
+        label_name, ext_label = os.path.splitext(self.img_labels[idx])
+        
+        hsi_name, ext_hsi = os.path.splitext(self.img_names[idx])
+        
+        
+        
+        
+        assert label_name.split("/")[-2] == hsi_name.split("/")[-2] # make sure they have the same name 
+        assert label_name.split("/")[-1] == hsi_name.split("/")[-1] # make sure they have the same name 
+
+        # read the label image 
+        label_path = join(self.label_dir, self.img_labels[idx])
+        label_img = Image.open(label_path)#.convert('RGB')
+        
+        
+        label_img_np = np.array(label_img) # uint8 x,y,channels
+        
+        
+        
+        
+        hsi_path = join(self.img_dir, self.img_names[idx])
+        hsi_img = tiff.imread(hsi_path)  #  x,y,channels for albumnetations
+        
+
+        # apply transformations  # must be in x,y,channels format        
+        if self.transform:            
+            transformed = self.transform(image = hsi_img, mask = label_img_np)
+        
+            hsi_img,  label_img_np =  torch.tensor(transformed['image']), torch.tensor(transformed['mask'])
+        else:
+            hsi_img,  label_img_np = torch.tensor(hsi_img), torch.tensor(label_img_np)
+    
+          
+        #convert from x,y,channels to channels, x, y
+        hsi_img = hsi_img.permute(2,0,1)
+        
+        #convert from uint8 to float32
+        hsi_img = hsi_img.float()
+            
+        return hsi_img,  label_img_np   
 
 class CombinedLoss(nn.Module):
     def __init__(self, ignore_index=0):
@@ -203,6 +281,21 @@ class CombinedLoss(nn.Module):
         ce_loss = self.cross_entropy_loss(logits, targets)
         # boundary_loss = self.BoundaryLoss(logits, targets)
 
+        # if torch.isnan(logits).any() or torch.isinf(logits).any():
+        #     raise ValueError("Logits contain NaNs or Infs")
+       
+        # if torch.isnan(dice_loss).any() or torch.isinf(dice_loss).any():
+        #     # Check for NaNs or Infs in logits
+        
+        #     raise ValueError("dice_loss contains NaNs or Infs")
+        # if torch.isnan(lovasz_loss).any() or torch.isinf(lovasz_loss).any():
+        #     raise ValueError("lovasz_loss contains NaNs or Infs")
+        # if torch.isnan(jaccard_loss).any() or torch.isinf(jaccard_loss).any():
+        #     raise ValueError("jaccard_loss contains NaNs or Infs")
+        
+        # if torch.isnan(ce_loss).any() or torch.isinf(ce_loss).any():
+            raise ValueError("ce_loss contains NaNs or Infs")
+        
         return   1 * ce_loss +   2 * dice_loss + 3 * lovasz_loss + 3 * jaccard_loss #+ 1 * boundary_loss
         
         # scale iou loss since it is smaller than focal loss
@@ -212,13 +305,12 @@ def collate_fn(inputs):
     # hyperspectral
     batch = dict()
     batch["hsi_pixel_values"] = torch.stack([i[0] for i in inputs], dim=0)
-    batch["rgb_pixel_values"] = torch.stack([i[1] for i in inputs], dim=0)
-    batch["labels"] = torch.stack([i[2] for i in inputs], dim=0).long()
+    batch["labels"] = torch.stack([i[1] for i in inputs], dim=0).long()
 
     return batch   
 
 class BaseSegmentationModel(L.LightningModule):
-        def __init__(self, num_classes, learning_rate = 1e-3, ignore_index=0 ,num_channels=12, num_workers=4, train_dataset=None, val_dataset=None, test_dataset = None, batch_size=2, results_dir="results" ):
+        def __init__(self, num_classes, learning_rate = 1e-3, ignore_index=-1 ,num_channels=12, num_workers=4, train_dataset=None, val_dataset=None, test_dataset = None, batch_size=2, results_dir="results" ):
             super().__init__()
             
             self.learning_rate = learning_rate
@@ -337,11 +429,10 @@ class BaseSegmentationModel(L.LightningModule):
         
         def hsi_step(self, batch):
             
-            rgb_pixel_values = batch["rgb_pixel_values"]
             hsi_pixel_values = batch["hsi_pixel_values"]
             labels = batch["labels"]     
             
-            logits = self.forward(hsi_pixel_values,rgb_pixel_values)
+            logits = self.forward(hsi_pixel_values)
             
             return logits , labels
         
@@ -433,87 +524,6 @@ def set_no_grad_on_backbone(model):
                     param.requires_grad = False
                     # print(name)
                     
-class convnext_upernet(BaseSegmentationModel):
-    def __init__(self, num_classes, learning_rate=1e-3, ignore_index=0, num_channels=12, num_workers=4, train_dataset=None, val_dataset=None, test_dataset=None, batch_size=2, patch_size=4, image_size=256):
-
-   
-        super().__init__(num_classes, learning_rate, ignore_index, num_channels, num_workers, train_dataset, val_dataset, test_dataset, batch_size)
-
-        #  facebook/convnextv2-large-22k-384
-        # Following large configureation
-        # embed_dim = 192
-        # backbone_configuration = ConvNextV2Config(
-        #     num_channels=num_channels,
-        #     patch_size=patch_size,
-        #     image_size=image_size,
-        #     out_features=["stage1", "stage2", "stage3", "stage4"],
-        #     depths=[3,3,27,3], 
-        #     hidden_sizes=[embed_dim, embed_dim*2, embed_dim*4, embed_dim*8]
-        #     )
-         
-
-        seg_head = UperNetConfig(
-            
-            # backbone="convnextv2_config/convnextv2_backbone", 
-            backbone="facebook/convnextv2-large-22k-384", 
-            use_pretrained_backbone=False,
-            
-            # backbone_config=backbone_configuration, 
-            
-            num_labels = num_classes,    
-            out_features=["stage1", "stage2", "stage3", "stage4"],
-            use_auxiliary_head=False,
-            num_channels= num_channels,   
-            image_size=image_size,   
-            patch_size=patch_size,       
-        )                   
-        self.backbone_upernet = UperNetForSemanticSegmentation(seg_head)
-        
-        
-        self.backbone_upernet.backbone.embeddings.patch_embeddings = nn.Conv2d(num_channels, 192, kernel_size=(4, 4), stride=(4, 4))
-        self.backbone_upernet.backbone.embeddings.num_channels = num_channels
-        self.backbone_upernet.backbone.embeddings.patch_embeddings.num_channels = num_channels
-        # print(self.backbone_upernet)
-        # set_no_grad_on_backbone(self.swin_upernet)
-
-    def forward(self, hsi_img, rgb_img):
-        outputs = self.backbone_upernet(hsi_img)
-        return outputs.logits
-        
-class SpectralAdapter_new(nn.Module):
-    def __init__(self, in_channels):
-        super(SpectralAdapter_new, self).__init__()
-        self.conv1 = nn.Conv2d(in_channels, 200, kernel_size=1 )
-        self.bn1 = nn.BatchNorm2d(200)
-        self.relu1 = nn.ReLU()
-        
-        self.conv2 = nn.Conv2d(200, 150, kernel_size=1 )
-        self.bn2 = nn.BatchNorm2d(150)
-        self.relu2 = nn.ReLU()
-        
-        self.conv3 = nn.Conv2d(150, 128, kernel_size=1 )
-        self.bn3 = nn.BatchNorm2d(128)
-        self.relu3 = nn.ReLU()
-        
-        # self.global_pool = nn.AdaptiveAvgPool1d(1)
-        
-    def forward(self, x):
-        x = self.conv1(x)
-        x = self.bn1(x)
-        x = self.relu1(x)
-        
-        x = self.conv2(x)
-        x = self.bn2(x)
-        x = self.relu2(x)
-        
-        x = self.conv3(x)
-        x = self.bn3(x)
-        x = self.relu3(x)
-        
-        # x = self.global_pool(x)
-        # x = x.view(x.size(0), -1)  # Flatten the output
-        return x
-    
 class swin_upernet(BaseSegmentationModel):
     def __init__(self, num_classes, learning_rate=1e-3, ignore_index=0, num_channels=12, num_workers=4, train_dataset=None, val_dataset=None, test_dataset=None, batch_size=2, patch_size=4, image_size=256):
 
@@ -529,8 +539,8 @@ class swin_upernet(BaseSegmentationModel):
           
              
             # backbone = "microsoft/swin-large-patch4-window7-224",
-            backbone = "microsoft_swin_model_not_pretrained",
-            # backbone = "microsoft_swin_model_pretrained",
+            # backbone = "microsoft_swin_model_not_pretrained",
+            backbone = "microsoft_swin_model_pretrained",
             # backbone="microsoft_swin_fractal_pretrained_224",
             
             
@@ -563,7 +573,8 @@ class swin_upernet(BaseSegmentationModel):
         
         
         self.upernet.backbone = self.backbone_pretrained.backbone
-       
+        
+        # print(self.upernet.backbone.embeddings.patch_embeddings.projection.weight.shape[1])
         self.upernet.backbone.embeddings.patch_embeddings.projection = nn.Conv2d(
             num_channels,
             self.upernet.backbone.config.embed_dim,
@@ -573,7 +584,7 @@ class swin_upernet(BaseSegmentationModel):
         
         self.upernet.config.num_channels = num_channels
         self.upernet.backbone.config.num_channels = num_channels
-        
+
         # print(self.upernet.backbone.embeddings.patch_embeddings.projection)
         # self.backbone_upernet.backbone.save_pretrained("microsoft_swin_model_not_pretrained")
         
@@ -603,14 +614,18 @@ class swin_upernet(BaseSegmentationModel):
         
 
 
-    def forward(self, hsi_img, rgb_img):
-        # feature_img = self.spectral_adapter(hsi_img)
+    def forward(self, hsi_img):
         outputs = self.upernet(hsi_img)
+        
+        if torch.isnan(outputs.logits).any() or torch.isinf(outputs.logits).any():
+            raise ValueError("forward Logits contain NaNs or Infs")
+        
+        
         return outputs.logits
 
 
 
-                       
+"""                       
 dataset_dir='/workspaces/LIB-HSI'
 rgb_data_json = '/workspaces/fractal-pretraining/lib_hsi_rgb.json'
 file_data =  open(rgb_data_json)
@@ -623,35 +638,62 @@ for i, item in enumerate(file_contents['items'], start=0):
 # print(id2label)
 # print(id2color)
 num_classes = len(id2label)
-num_classes = len(id2label)
+max_pixel_value = 255.0
+num_channels = 204
+ignore_index=7 # misc. class, 
+
+
+"""
+
+
+label_dir='/workspaces/enmap/cdl' #2k images
+data_dir = '/workspaces/enmap/enmap_mini'
+num_classes = 255 #20 # labels range from 0-254
+max_pixel_value = 21259.0 #32767.0, min is -1217.0
+num_channels = 202
+ignore_index=-1
+
+
+
+# label_dir='/workspaces/enmap/nlcd' # 15k images
+# data_dir = '/workspaces/enmap/enmap_mini'
+# num_classes = 96 #15 # labels range from 0-95
+# max_pixel_value = 25212.0 #min is -4968
+# num_channels = 202
+
+
+# label_dir='/workspaces/enmap/corine' # 11k images
+# data_dir = '/workspaces/enmap/enmap_mini'
+# num_classes = 19 # labels range from 0-999 # multi label classification
+# max_pixel_value = 24824.0 #min is -1658
+# num_channels = 202
+
 
 batch_size = 8
 accumulate_grad_batches = 4 # increases the effective batch size  # 1 means no accumulation # more important when batch size is small or not doing multi gpu training
 
-ignore_index=7 # misc. class, 
 
 num_workers = 4 #  os.cpu_count() or 1  # Fallback to 1 if os.cpu_count() is None
-initial_lr =  3e-4  # .001 for smp, 3e-4 for transformer
+initial_lr =  1e-4 #3e-4  # .001 for smp, 3e-4 for transformer
 swa_lr = 0.01
 # these should be multiple of 14 for dino model 
 # input image is of size 256x256
 img_height = 224 #256  #512
 img_width = 224 #256  #256
 max_num_epochs = 1000
-grad_clip_val = 5 # clip gradients that have norm bigger than tmax_val)his
+grad_clip_val = 3#5 # clip gradients that have norm bigger than tmax_val)his
 training_model = False
 tuning_model = False
 test_model = True
-num_channels = 204
 
 
 torch.cuda.empty_cache()
 
 test_transform = A.Compose([
     A.Resize(width=img_width, height=img_height), 
-    A.Normalize(normalization="image", max_pixel_value=255.0)
+    # A.Normalize(normalization="image", max_pixel_value=max_pixel_value)
     # A.Normalize(mean=pretrained_mean, std=pretrained_std, max_pixel_value=255.0),
-], additional_targets={"hsi_image": "image"})
+])
 
 train_transform = A.Compose([
     A.HorizontalFlip(p=0.5),
@@ -662,57 +704,94 @@ train_transform = A.Compose([
     A.RandomScale(scale_limit=0.2, p=0.5),
     A.ElasticTransform(alpha=1, sigma=50, p=0.5),  # Set alpha_affine to None
     A.Resize(width=img_width, height=img_height), 
-    A.Normalize(normalization="image", max_pixel_value=255.0),
+    A.Normalize(normalization="image", max_pixel_value=max_pixel_value),
     # A.Normalize(mean=pretrained_mean, std=pretrained_std, max_pixel_value=255.0),
     A.ChannelDropout(channel_drop_range=(1, 2), fill_value=0, p=0.5)
-], additional_targets={"hsi_image": "image"})
+])
 
 
 
-train_dataset = LIBHSIDataset(image_set="train", root_dir=dataset_dir, id2color=id2color, transform=train_transform)
-test_dataset = LIBHSIDataset(image_set="test", root_dir=dataset_dir, id2color=id2color,  transform=test_transform)
-val_dataset = LIBHSIDataset(image_set="validation", root_dir=dataset_dir, id2color=id2color, transform=test_transform)
+# train_dataset = LIBHSIDataset(image_set="train", root_dir=dataset_dir, id2color=id2color, transform=train_transform)
+# test_dataset = LIBHSIDataset(image_set="test", root_dir=dataset_dir, id2color=id2color,  transform=test_transform)
+# val_dataset = LIBHSIDataset(image_set="validation", root_dir=dataset_dir, id2color=id2color, transform=test_transform)
+
+full_dataset = ENMAP_CDL(data_dir=data_dir, label_dir= label_dir, transform=test_transform)
+train_ratio = 0.8
+train_len = int(len(full_dataset) * train_ratio)
+val_len = len(full_dataset) - train_len
+
+# Perform the split
+train_dataset, val_dataset = random_split(full_dataset, [train_len, val_len])
+
+# Apply the transformations to the respective datasets
+train_dataset.dataset.transform = train_transform
+val_dataset.dataset.transform = test_transform
+test_dataset = full_dataset
+test_dataset.transform = test_transform
 
 
+# # Print the sizes of the datasets
+print(f'Train dataset size: {len(train_dataset)}')
+print(f'Validation dataset size: {len(val_dataset)}')
+print(f'Test dataset size: {len(test_dataset)}')
 
+# train_data_test = train_dataset[0]
 
-# model = convnext_upernet(num_classes=num_classes,learning_rate=initial_lr, ignore_index=ignore_index, num_channels= num_channels, num_workers=num_workers,  train_dataset=train_dataset,val_dataset=val_dataset, test_dataset=test_dataset, batch_size=batch_size, image_size=img_height)
+# # go through full dataset and get max and min values for img and labels
+# max_img = torch.tensor(0.0)
+# min_img = torch.tensor(0.0)
+# max_label = torch.tensor(0.0)
+# min_label = torch.tensor(0.0)
+# for i in range(len(full_dataset)):
+#     print(i)
+#     img, label = full_dataset[i]
+#     max_img = torch.max(max_img, torch.max(img))
+#     min_img = torch.min(min_img, torch.min(img))
+#     max_label = torch.max(max_label, torch.max(label))
+#     min_label = torch.min(min_label, torch.min(label))
+#     print(f'Image {i}: max pixel value: {torch.max(img)}, min pixel value: {torch.min(img)}')
+
+# print(f'Max pixel value in images: {max_img}')
+# print(f'Min pixel value in images: {min_img}')
+# print(f'Max pixel value in labels: {max_label}')
+# print(f'Min pixel value in labels: {min_label}')
+
+# # print(train_data_test[0].shape, train_data_test[1].shape)
+# sys.exit()
+
 # pretrained_model = swin2_model.load_from_checkpoint('lightning_logs/version_22/checkpoints/lowest_val_loss_hsi.ckpt')
-# sample_msi_img = torch.randn(batch_size, num_channels, img_height, img_height).to("cuda")  # Example shape
-# sample_rgb_img = torch.randn(batch_size, 3, img_height, img_height).to("cuda")  # Example shape for RGB image
-# # # # Pass the sample input through the model
-# output = pretrained_model.forward(sample_msi_img, sample_rgb_img)
+
 # sys.exit()
-
-model = swin_upernet(num_classes=num_classes,learning_rate=initial_lr, ignore_index=ignore_index, num_channels= num_channels, num_workers=num_workers,  train_dataset=train_dataset,val_dataset=val_dataset, test_dataset=test_dataset, batch_size=batch_size, image_size=img_height)
-
-
-
-# Create a sample input tensor with the appropriate shape
-# Adjust the shape according to your model's expected input
-sample_msi_img = torch.randn(batch_size, num_channels, img_height, img_height)  # Example shape
-sample_rgb_img = torch.randn(batch_size, 3, img_height, img_height)  # Example shape for RGB image
-# # # Pass the sample input through the model
-output = model.forward(sample_msi_img, sample_rgb_img)
-# sys.exit()
-
-checkpoint_callback_val_loss = ModelCheckpoint(monitor="val_loss", mode="min", save_top_k=1, filename="lowest_val_loss_hsi")
-
-# Set the float32 matmul precision to 'medium' or 'high'
-torch.set_float32_matmul_precision('medium')
-
-trainer = L.Trainer(
-    max_epochs=max_num_epochs, 
-    accumulate_grad_batches=accumulate_grad_batches, 
-    callbacks=[
-        EarlyStopping(monitor="val_loss", mode="min", verbose=True, patience=15), 
-        checkpoint_callback_val_loss, StochasticWeightAveraging(swa_lrs=swa_lr) ], 
-    accelerator="gpu", 
-    devices="auto", 
-    gradient_clip_val=grad_clip_val, 
-    precision="16-mixed" ) # 
 
 if training_model == True: 
+    
+    model = swin_upernet(num_classes=num_classes,learning_rate=initial_lr, ignore_index=ignore_index, num_channels= num_channels, num_workers=num_workers,  train_dataset=train_dataset,val_dataset=val_dataset, test_dataset=test_dataset, batch_size=batch_size, image_size=img_height)
+
+    # model = swin_upernet.load_from_checkpoint("lightning_logs/version_9/checkpoints/lowest_val_loss_hsi.ckpt")
+
+    # # Create a sample input tensor with the appropriate shape
+    # # Adjust the shape according to your model's expected input
+    # sample_msi_img = torch.randn(batch_size, num_channels, img_height, img_height)  # Example shape
+    # # # # Pass the sample input through the model
+    # output = model.forward(sample_msi_img)
+    # # sys.exit()
+
+    checkpoint_callback_val_loss = ModelCheckpoint(monitor="val_loss", mode="min", save_top_k=1, filename="lowest_val_loss_hsi")
+
+    # Set the float32 matmul precision to 'medium' or 'high'
+    torch.set_float32_matmul_precision('medium')
+
+    trainer = L.Trainer(
+        max_epochs=max_num_epochs, 
+        accumulate_grad_batches=accumulate_grad_batches, 
+        callbacks=[
+            EarlyStopping(monitor="val_loss", mode="min", verbose=True, patience=15), 
+            checkpoint_callback_val_loss, StochasticWeightAveraging(swa_lrs=swa_lr) ], 
+        accelerator="gpu", 
+        devices="auto", 
+        gradient_clip_val=grad_clip_val, 
+        precision="16-mixed" ) # 
+        
     
     if tuning_model:
         tuner = Tuner(trainer)
@@ -740,9 +819,14 @@ if training_model == True:
 
 if test_model:
     
-    model = swin_upernet.load_from_checkpoint("lightning_logs/version_59/checkpoints/lowest_val_loss_hsi.ckpt")
+    model = swin_upernet.load_from_checkpoint("lightning_logs/version_14/checkpoints/lowest_val_loss_hsi.ckpt")
 
     model.eval()
+    torch.set_float32_matmul_precision('high')
+    trainer = L.Trainer(
+        accelerator="gpu", 
+        devices="auto", 
+        precision="16-mixed" ) # 
 
     trainer.test(model)
 

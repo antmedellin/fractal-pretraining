@@ -1,5 +1,5 @@
 {
-  "_name_or_path": "microsoft_swin_model_pretrained",
+  "_name_or_path": "microsoft_swin_model_not_pretrained",
   "architectures": [
     "SwinForMaskedImageModeling"
   ],

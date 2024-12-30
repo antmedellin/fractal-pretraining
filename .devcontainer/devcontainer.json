@@ -8,6 +8,7 @@
       "mounts":[
    
           "source=${localWorkspaceFolder}/../HyperImages/LIB-HSI,target=/workspaces/LIB-HSI,type=bind,consistency=cached",
+          "source=${localWorkspaceFolder}/../HyperImages/spectral_earth_mini,target=/workspaces/enmap,type=bind,consistency=cached",
       ],
   
       "runArgs":[

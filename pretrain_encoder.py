@@ -18,6 +18,7 @@ from torch.optim.lr_scheduler import CosineAnnealingLR, SequentialLR, LinearLR
 from transformers import SwinConfig, SwinModel
 from transformers import  UperNetConfig, UperNetForSemanticSegmentation,  SwinForMaskedImageModeling
 from transformers import AutoConfig
+from os.path import join
 
 
 def collate_fn(inputs):    
@@ -169,7 +170,68 @@ class fractal_dataset(Dataset):
         #convert from uint8 to float32
         hsi_img = hsi_img.float()
             
-        return hsi_img      
+        return hsi_img   
+    
+    
+    
+    
+class enmap_dataset(Dataset):
+    def __init__(self,  root_dir,    transform=None):
+        
+        # image_set # train ,test, validation
+        self.transform = transform
+      
+
+        self.img_dir =  root_dir
+        
+        
+        
+        self.img_names = []
+        for root, _, files in os.walk(self.img_dir):
+            for file in files:
+                if file.endswith('.tif'):
+                    # self.img_labels.append(os.path.join(root, file))
+                    # self.img_names.append(os.path.join(self.img_dir, root.split("/")[-1], file))
+                    img_path = os.path.join(root, file)
+                    if os.path.exists(img_path):
+                        self.img_names.append(img_path)
+        
+        
+        # print(len(self.img_names))
+        # sys.exit()
+        self.num_images = len( self.img_names  ) 
+
+        # sort img_names and img_labels
+        self.img_names.sort()
+        
+
+    def __len__(self):
+        return self.num_images
+
+    def __getitem__(self, idx):
+        
+        hsi_name, ext_hsi = os.path.splitext(self.img_names[idx])
+        
+        
+        hsi_path = join(self.img_dir, self.img_names[idx])
+        hsi_img = tiff.imread(hsi_path)  #  x,y,channels for albumnetations
+        
+        
+        # apply transformations  # must be in x,y,channels format        
+        if self.transform:            
+            transformed = self.transform(image = hsi_img)
+        
+            hsi_img = torch.tensor(transformed['image'])
+        else:
+            hsi_img = torch.tensor(hsi_img)
+          
+        #convert from x,y,channels to channels, x, y
+        hsi_img = hsi_img.permute(2,0,1)
+        
+        #convert from uint8 to float32
+        hsi_img = hsi_img.float()
+            
+        return hsi_img       
 
 # https://github.com/huggingface/transformers/blob/main/examples/pytorch/image-pretraining/run_mim.py    
 class MaskGenerator:
@@ -275,19 +337,26 @@ class swin_model(BaseSegmentationModel):
 
 # test out loading hsi image 
 datset_dir = "output_test"
+full_dataset = fractal_dataset(root_dir=datset_dir)
+
+# datset_dir = '/workspaces/enmap/enmap_mini'
+# full_dataset = enmap_dataset(root_dir=datset_dir)
+
+
+
 batch_size = 16
-accumulate_grad_batches = 16 # want batch size to be 256
-num_workers = 4 
+accumulate_grad_batches = int(256/batch_size) # want batch size to be 256 # need to also factor in number of gpus
+num_workers =  os.cpu_count() or 1 
 initial_lr =  1e-3 #swin2 paper used 1e-3,  # 8e-4 simmim paper
 grad_clip_val = 5 
 # Define the split ratio
 train_ratio = 0.85 # % used for training
 mask_ratio = 0.60 # 0.6 simmim (standard for rgb)
 
-max_epochs = 5# 200
+max_epochs =  200
 patch_size = 4
 
-full_dataset = fractal_dataset(root_dir=datset_dir)
+
 test_img = full_dataset[0]
 # print(test_img.shape, test_img.dtype)
 # # plot a layer of the image
@@ -347,9 +416,18 @@ print(f'Validation dataset size: {len(val_dataset)}')
 
 
 model = swin_model(learning_rate=initial_lr, num_channels= num_channels, num_workers=num_workers,  train_dataset=train_dataset,val_dataset=val_dataset, batch_size=batch_size, image_size=img_height, training_epochs=max_epochs, patch_size=patch_size)
-# model = swin_model.load_from_checkpoint('lightning_logs/version_47/checkpoints/lowest_val_loss_hsi.ckpt').to("cuda")
+# model = swin_model.load_from_checkpoint('lightning_logs/version_16/checkpoints/lowest_val_loss_hsi.ckpt').to("cuda")
 
 checkpoint_callback_val_loss = ModelCheckpoint(monitor="val_loss", mode="min", save_top_k=1, filename="lowest_val_loss_hsi")
+
+# Callback to save the model every 10 epochs
+checkpoint_callback_every_10_epochs = ModelCheckpoint(
+    every_n_epochs=10,
+    save_top_k=-1,  # Save all checkpoints
+    filename="epoch_{epoch:02d}"
+)
+
+
 # Set the float32 matmul precision to 'medium' or 'high'
 torch.set_float32_matmul_precision('medium')
 
@@ -358,7 +436,7 @@ trainer = L.Trainer(
     accumulate_grad_batches=accumulate_grad_batches, 
     callbacks=[
         EarlyStopping(monitor="val_loss", mode="min", verbose=True, patience=20), 
-        checkpoint_callback_val_loss ], 
+        checkpoint_callback_val_loss, checkpoint_callback_every_10_epochs ], 
     accelerator="gpu", 
     devices="auto", 
     gradient_clip_val=grad_clip_val, 
@@ -369,10 +447,10 @@ model.hparams.learning_rate = initial_lr  # learning_rate
 model.hparams.batch_size = batch_size
 
 
-sample_hsi_img = torch.rand(batch_size, num_channels, img_height, img_width)#.to("cuda")
-sample_mask = torch.stack([mask_generator() for i in range(batch_size)], dim=0)#.to("cuda")
-# print( sample_mask.shape)
-output = model.forward(sample_hsi_img, sample_mask)
+# sample_hsi_img = torch.rand(batch_size, num_channels, img_height, img_width)#.to("cuda")
+# sample_mask = torch.stack([mask_generator() for i in range(batch_size)], dim=0)#.to("cuda")
+# # print( sample_mask.shape)
+# output = model.forward(sample_hsi_img, sample_mask)
 
 
 # sys.exit()
