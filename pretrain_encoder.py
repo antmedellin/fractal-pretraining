@@ -9,6 +9,8 @@ from torchvision.transforms import Resize
 import tifffile as tiff
 import os
 import sys
+os.environ["NO_ALBUMENTATIONS_UPDATE"] = "1"
+import glob
 from torch.utils.data import Dataset
 import albumentations as A 
 from torch.utils.data import random_split
@@ -19,6 +21,12 @@ from transformers import SwinConfig, SwinModel
 from transformers import  UperNetConfig, UperNetForSemanticSegmentation,  SwinForMaskedImageModeling
 from transformers import AutoConfig
 from os.path import join
+from lightning.pytorch.tuner import Tuner
+from lightning.pytorch.plugins.environments import SLURMEnvironment
+
+torch.cuda.empty_cache()
+print("hello world")
+# sys.exit()
 
 
 def collate_fn(inputs):    
@@ -185,6 +193,7 @@ class enmap_dataset(Dataset):
         self.img_dir =  root_dir
         
         
+        #self.img_names = glob.glob(os.path.join(self.img_dir, '**', '*.tif'), recursive=True)
         
         self.img_names = []
         for root, _, files in os.walk(self.img_dir):
@@ -193,10 +202,12 @@ class enmap_dataset(Dataset):
                     # self.img_labels.append(os.path.join(root, file))
                     # self.img_names.append(os.path.join(self.img_dir, root.split("/")[-1], file))
                     img_path = os.path.join(root, file)
-                    if os.path.exists(img_path):
-                        self.img_names.append(img_path)
+                    #if os.path.exists(img_path):
+                    self.img_names.append(img_path)
+                    #print(len(self.img_names))
         
         
+
         # print(len(self.img_names))
         # sys.exit()
         self.num_images = len( self.img_names  ) 
@@ -336,17 +347,22 @@ class swin_model(BaseSegmentationModel):
 
 
 # test out loading hsi image 
-datset_dir = "output_test"
-full_dataset = fractal_dataset(root_dir=datset_dir)
+# datset_dir = "output_test"
 
-# datset_dir = '/workspaces/enmap/enmap_mini'
-# full_dataset = enmap_dataset(root_dir=datset_dir)
+print("init dataset")
+
+#dataset_dir = "/scratch/user/antmedellin/data/fractals"
+#full_dataset = fractal_dataset(root_dir=dataset_dir)
+
+dataset_dir = "/scratch/user/antmedellin/data/spectral_earth/enmap"
+# dataset_dir = '/workspaces/enmap/enmap_mini'
+full_dataset = enmap_dataset(root_dir=dataset_dir)
 
 
 
-batch_size = 16
-accumulate_grad_batches = int(256/batch_size) # want batch size to be 256 # need to also factor in number of gpus
-num_workers =  os.cpu_count() or 1 
+batch_size = 64# 32 #16
+accumulate_grad_batches = int(256/batch_size/4) # want batch size to be 256 # need to also factor in number of gpus
+num_workers =16#8 #os.cpu_count() or 1 
 initial_lr =  1e-3 #swin2 paper used 1e-3,  # 8e-4 simmim paper
 grad_clip_val = 5 
 # Define the split ratio
@@ -356,6 +372,8 @@ mask_ratio = 0.60 # 0.6 simmim (standard for rgb)
 max_epochs =  200
 patch_size = 4
 
+
+print("num workers", num_workers)
 
 test_img = full_dataset[0]
 # print(test_img.shape, test_img.dtype)
@@ -389,6 +407,7 @@ train_transform = A.Compose([
 ])
 
 # Calculate the lengths for each split
+print("splitting dataset")
 train_len = int(len(full_dataset) * train_ratio)
 val_len = len(full_dataset) - train_len
 
@@ -427,6 +446,13 @@ checkpoint_callback_every_10_epochs = ModelCheckpoint(
     filename="epoch_{epoch:02d}"
 )
 
+# Callback to save the most recent epoch
+checkpoint_callback_most_recent = ModelCheckpoint(
+    save_top_k=1,
+    filename="most_recent_epoch",
+    save_last=True
+)
+
 
 # Set the float32 matmul precision to 'medium' or 'high'
 torch.set_float32_matmul_precision('medium')
@@ -436,24 +462,35 @@ trainer = L.Trainer(
     accumulate_grad_batches=accumulate_grad_batches, 
     callbacks=[
         EarlyStopping(monitor="val_loss", mode="min", verbose=True, patience=20), 
-        checkpoint_callback_val_loss, checkpoint_callback_every_10_epochs ], 
+        checkpoint_callback_val_loss, checkpoint_callback_every_10_epochs, checkpoint_callback_most_recent ], 
     accelerator="gpu", 
-    devices="auto", 
+    devices=2,#"auto",#1,#"auto", 
+    num_nodes=2,
     gradient_clip_val=grad_clip_val, 
-    precision="16-mixed" ) # 
+    precision="bf16",#"16-mixed",
+    default_root_dir= "/scratch/user/antmedellin/data/spectral_earth/lightning",
+    plugins=[SLURMEnvironment(auto_requeue=False)],
+    strategy = "ddp"
+      ) # 
 
+#tuner = Tuner(trainer)
+# batch_finder = tuner.scale_batch_size(model, mode="binsearch", init_val=32)
+#model.hparams.batch_size=batch_finder
 
 model.hparams.learning_rate = initial_lr  # learning_rate
 model.hparams.batch_size = batch_size
 
+print("learning rate:", model.hparams.learning_rate, "batch size:", model.hparams.batch_size)
+# hparams = model.hparams
 
-# sample_hsi_img = torch.rand(batch_size, num_channels, img_height, img_width)#.to("cuda")
-# sample_mask = torch.stack([mask_generator() for i in range(batch_size)], dim=0)#.to("cuda")
+
+#sample_hsi_img = torch.rand(batch_size, num_channels, img_height, img_width)#.to("cuda")
+#sample_mask = torch.stack([mask_generator() for i in range(batch_size)], dim=0)#.to("cuda")
 # # print( sample_mask.shape)
-# output = model.forward(sample_hsi_img, sample_mask)
+#output = model.forward(sample_hsi_img, sample_mask)
 
 
-# sys.exit()
+#sys.exit()
 
 trainer.fit(model)
 
@@ -461,6 +498,6 @@ trainer.fit(model)
 # model = swin_model.load_from_checkpoint('lightning_logs/version_68/checkpoints/lowest_val_loss_hsi.ckpt')
 
 # only save backbone encoder
-backbone = model.backbone
-model.backbone.save_pretrained("microsoft_swin_fractal_pretrained_224")
-print("model saved")
+# backbone = model.backbone
+# model.backbone.save_pretrained("microsoft_swin_fractal_pretrained_224")
+# print("model saved")
